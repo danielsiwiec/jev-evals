@@ -1,10 +1,9 @@
-import asyncio
 import os
 
 import pytest
 
 from evals.bankrate_api import Offer, best_zero_point, fetch_offers, lender_in, rate_in
-from evals.drivers import DRIVERS, selected
+from evals.drivers import DRIVERS, gather, selected
 from evals.report import render
 from jev_evals.jev import jev_available
 
@@ -27,6 +26,13 @@ OBJECTIVE = (
 RUNS = int(os.getenv("EVAL_RUNS", "1"))
 
 pytestmark = pytest.mark.skipif(not jev_available(), reason="requires TYPESAFE_API_KEY")
+
+
+def _job(name: str):
+    async def run() -> dict:
+        return await DRIVERS[name](START_URL, OBJECTIVE, VALUES)
+
+    return run
 
 
 def truth() -> Offer:
@@ -52,13 +58,12 @@ async def test_best_zero_point_refinance_rate() -> None:
     print(f"\nground truth: {expected.lender} @ {expected.rate}% (APR {expected.apr}, {expected.points} points)")
     rows = []
     for index in range(1, RUNS + 1):
-        for name in selected():
-            row = await DRIVERS[name](START_URL, OBJECTIVE, VALUES)
+        jobs = [(name, _job(name)) for name in selected()]
+        for row in await gather(jobs):
             row["run"] = index
             row.update(score(row["summary"], row["url"], expected))
             rows.append(row)
             print(render([row], "", _COLUMNS).splitlines()[3], flush=True)
-            await asyncio.sleep(2)
     print(render(rows, f"runs={RUNS} loan={LOAN} value={PROPERTY} fico={FICO} zip={ZIP}", _COLUMNS))
     assert any(r["found"] for r in rows), f"no run reported {expected.lender} at {expected.rate}%"
 

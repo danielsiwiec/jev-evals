@@ -28,6 +28,7 @@ _SECRET = re.compile(r"pass|secret|token|key|pin|cvv|ssn", re.I)
 _VALUE_LEN = 120
 _TEXT_EXCERPT = 1800
 _NAME_LEN = 80
+_HISTORY_WINDOW = 10
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class Observation:
     scroll: dict[str, int]
     elements: list[Element]
     raw: dict[str, Any] = field(default_factory=dict)
+    full_text: str = ""
 
     @classmethod
     def from_raw(cls, raw: dict[str, Any]) -> "Observation":
@@ -88,14 +90,16 @@ class Observation:
             )
             for e in raw.get("elements", [])
         ]
+        full_text = _clean_text(str(raw.get("text", "")))
         return cls(
             url=str(raw.get("url", "")),
             title=_clean(str(raw.get("title", ""))),
-            text=_clean_text(str(raw.get("text", "")))[:_TEXT_EXCERPT],
+            text=full_text[:_TEXT_EXCERPT],
             alerts=[_clean(a)[:200] for a in raw.get("alerts", []) if _clean(a)],
             scroll=dict(raw.get("scroll", {})),
             elements=elements,
             raw=raw,
+            full_text=full_text,
         )
 
     def fingerprint(self) -> str:
@@ -170,7 +174,7 @@ def build_state(
             "text": text,
         },
         "elements": [e.line() for e in elements],
-        "recent_actions": history[-5:],
+        "recent_actions": history[-_HISTORY_WINDOW:],
     }
 
 
@@ -232,7 +236,9 @@ def build_questions(values: dict[str, str], elements: list[Element], style: str 
     if values:
         questions["value"] = Choice(
             instructions=(
-                "If text must be typed or an option chosen, which of `available_values` belongs in the target field?"
+                "If text must be typed or an option chosen, which of `available_values` belongs in the field "
+                "chosen as `type_target` or `select_target`? Match the value to that field's own label, not to "
+                "the goal as a whole: a field labelled for one quantity must not receive another quantity's value."
             ),
             criteria=dict.fromkeys(values),
         )

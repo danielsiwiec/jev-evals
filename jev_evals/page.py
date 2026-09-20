@@ -47,6 +47,20 @@ _CLEAR_OBSTRUCTION_JS = """el => {
   return cleared;
 }"""
 
+_ENTER_SUBMITS_JS = """el => {
+  const form = el.closest('form');
+  const type = (el.getAttribute('type') || '').toLowerCase();
+  const role = (el.getAttribute('role') || '').toLowerCase();
+  if (type === 'search' || role === 'searchbox') return true;
+  if (!form) return false;
+  const selector = 'input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select';
+  return form.querySelectorAll(selector).length <= 1;
+}"""
+_COMMIT_VALUE_JS = """el => {
+  el.dispatchEvent(new Event('change', {bubbles: true}));
+  el.blur();
+}"""
+
 
 def cdp_endpoint() -> str:
     return os.getenv("BROWSER_CDP_HTTP") or os.getenv("ABR_CDP_HTTP") or DEFAULT_CDP_HTTP
@@ -301,7 +315,7 @@ class Tab:
         await self.settle()
         outcome = await self._outcome(before, "clicked")
         if cleared and outcome == "clicked":
-            outcome = f"clicked (after clearing an overlay: {cleared})"
+            outcome = f"clicked (after clearing an overlay: {_summarize_cleared(cleared)})"
         if outcome == "clicked" and href and self.page is page and not await self._url_changed(page, url_before):
             followed = await self.open(href)
             return (
@@ -350,12 +364,30 @@ class Tab:
         locator = self._locator(ref)
         try:
             await locator.fill(value, timeout=_ACTION_TIMEOUT_MS)
-            if submit:
+            if submit and await self._enter_submits(locator):
                 await locator.press("Enter")
+            else:
+                await locator.evaluate(_COMMIT_VALUE_JS)
         except PlaywrightError as error:
             return f"type failed: {_short(error)}"
         await self.settle()
-        return await self._outcome(before, "typed")
+        outcome = await self._outcome(before, "typed")
+        kept = await self._current_value(locator)
+        if kept is not None and not _same_value(kept, value):
+            outcome += f" (the field now reads '{kept[:40]}')"
+        return outcome
+
+    async def _enter_submits(self, locator: Any) -> bool:
+        try:
+            return bool(await locator.evaluate(_ENTER_SUBMITS_JS, timeout=_ACTION_TIMEOUT_MS))
+        except PlaywrightError:
+            return False
+
+    async def _current_value(self, locator: Any) -> str | None:
+        try:
+            return str(await locator.evaluate("el => el.value ?? el.textContent ?? ''", timeout=_ACTION_TIMEOUT_MS))
+        except PlaywrightError:
+            return None
 
     async def select(self, ref: int, value: str) -> str:
         await self.ensure()
@@ -433,6 +465,8 @@ class Tab:
 
 
 async def _bring_to_front(page: Page) -> None:
+    if os.getenv("EVAL_PARALLEL", "0").lower() in ("1", "true", "yes"):
+        return
     try:
         await page.bring_to_front()
     except PlaywrightError:
@@ -448,6 +482,19 @@ def _busy_observation(url: str, timeout_s: float) -> dict[str, Any]:
         "scroll": {},
         "elements": [],
     }
+
+
+def _summarize_cleared(cleared: str) -> str:
+    parts = [p.strip() for p in cleared.split(",") if p.strip()]
+    unique = list(dict.fromkeys(parts))
+    if len(parts) > len(unique):
+        return f"{len(parts)} overlays ({', '.join(unique[:3])})"
+    return ", ".join(unique[:4]) + (f" +{len(unique) - 4} more" if len(unique) > 4 else "")
+
+
+def _same_value(actual: str, wanted: str) -> bool:
+    digits = re.compile(r"[^0-9a-zA-Z]")
+    return digits.sub("", actual).lower() == digits.sub("", wanted).lower()
 
 
 def _without_fragment(url: str) -> str:

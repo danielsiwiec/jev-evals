@@ -28,9 +28,11 @@ _DONE_AGREEMENT = 0.5
 _STUCK = 0.8
 _IRREVERSIBLE = 0.5
 _REPEAT_LIMIT = 3
+_THRASH_LIMIT = 4
+_THRASH_WINDOW = 8
 _WAIT_S = 2.0
 _WAIT_MAX_S = 10.0
-_SUMMARY_CHARS = 2500
+_SUMMARY_CHARS = 40000
 
 OnStep = Callable[[int, str], Awaitable[None]]
 
@@ -82,6 +84,7 @@ async def run_goal(
     history: list[str] = []
     fingerprints: list[str] = []
     actions: list[str] = []
+    targets: list[str] = []
     waits = 0
     observation: Observation | None = None
     status, reason = "max_steps", f"stopped after {max_steps} steps"
@@ -112,7 +115,7 @@ async def run_goal(
             if decision.action == "blocked":
                 status, reason = "blocked", _blocked_reason(observation, history)
                 break
-            if decision.stuck >= _STUCK or _repeating(fingerprints, actions):
+            if decision.stuck >= _STUCK or _repeating(fingerprints, actions, targets):
                 status, reason = "stuck", "page stopped changing"
                 break
             if decision.irreversible >= _IRREVERSIBLE and not allow_irreversible:
@@ -125,6 +128,7 @@ async def run_goal(
             waits = waits + 1 if decision.action == "wait" else 0
             outcome = await _perform(tab, decision, observation, values, waits)
             actions.append(decision.action)
+            targets.append(f"{decision.action}:{decision.target}")
             if outcome != "download started" and (await tab.observe()).fingerprint() == fingerprints[-1]:
                 outcome += " (page unchanged)"
             entry = f"{step}. {_pending(decision, observation, values)} -> {outcome}"
@@ -147,7 +151,7 @@ async def run_goal(
         status=status,
         url=observation.url,
         title=observation.title,
-        summary=observation.text[:_SUMMARY_CHARS],
+        summary=(observation.full_text or observation.text)[:_SUMMARY_CHARS],
         reason=reason,
         steps=history,
         decider=decider.model,
@@ -186,10 +190,18 @@ def _blocked_reason(observation: Observation, history: list[str]) -> str:
     return "no way forward from this page (login wall, error, or missing content)"
 
 
-def _repeating(fingerprints: list[str], actions: list[str]) -> bool:
-    if len(fingerprints) <= _REPEAT_LIMIT or len(set(fingerprints[-_REPEAT_LIMIT - 1 :])) != 1:
+def _repeating(fingerprints: list[str], actions: list[str], targets: list[str] | None = None) -> bool:
+    if len(fingerprints) > _REPEAT_LIMIT and len(set(fingerprints[-_REPEAT_LIMIT - 1 :])) == 1:
+        if any(action != "wait" for action in actions[-_REPEAT_LIMIT:]):
+            return True
+    return _thrashing(targets or [])
+
+
+def _thrashing(targets: list[str]) -> bool:
+    if len(targets) < _THRASH_LIMIT:
         return False
-    return any(action != "wait" for action in actions[-_REPEAT_LIMIT:])
+    recent = targets[-_THRASH_WINDOW:]
+    return any(recent.count(t) >= _THRASH_LIMIT for t in set(recent) if not t.startswith("wait"))
 
 
 def _pending(decision: Decision, observation: Observation, values: dict[str, str] | None = None) -> str:

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from typing import Any
@@ -11,6 +12,7 @@ from jev_evals.page import HostBrowser, Tab
 CDP = os.getenv("BROWSER_CDP_HTTP", "http://localhost:9222")
 MAX_STEPS = int(os.getenv("EVAL_MAX_STEPS", "40"))
 TIMEOUT_S = float(os.getenv("EVAL_TIMEOUT_S", "300"))
+PARALLEL = os.getenv("EVAL_PARALLEL", "0").lower() in ("1", "true", "yes")
 
 
 def rates(model: str) -> tuple[float, float, float]:
@@ -75,6 +77,16 @@ DRIVERS = {
     "gemini": llm_driver(GEMINI_MODEL),
     "luna": llm_driver(LUNA_MODEL),
 }
+
+
+async def gather(jobs: list[tuple[str, Any]], parallel: bool = PARALLEL) -> list[dict[str, Any]]:
+    if not parallel:
+        rows = []
+        for _, job in jobs:
+            rows.append(await job())
+            await asyncio.sleep(2)
+        return rows
+    return list(await asyncio.gather(*(job() for _, job in jobs)))
 
 
 def selected() -> list[str]:

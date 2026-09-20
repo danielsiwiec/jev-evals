@@ -116,7 +116,7 @@
     if (lines.length > 4000) throw new Error("__stop__");
   };
   try { walk(main, 0); } catch (e) { if (!String(e.message).includes("__stop__")) throw e; }
-  const text = lines.join(" ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{2,}/g, "\n").trim().slice(0, 5000);
+  const text = lines.join(" ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{2,}/g, "\n").trim().slice(0, 40000);
   return {
     url: location.href, title: document.title, text, alerts, elements,
     scroll: { y: Math.round(window.scrollY), height: Math.round(document.documentElement.scrollHeight), viewport: vh },
