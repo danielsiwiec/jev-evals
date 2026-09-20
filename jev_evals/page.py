@@ -62,6 +62,43 @@ _COMMIT_VALUE_JS = """el => {
 }"""
 
 
+_DISMISS_GATE_JS = """() => {
+  const ACCEPT = new RegExp('^(accept|agree|allow|confirm|got it|ok|okay|i agree|accept all'
+    + '|allow all|continue|save (and|&) exit|reject all|decline all|disagree'
+    + '|continue without)', 'i');
+  const blocks = (el) => {
+    const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+    if (st.position !== 'fixed' && st.position !== 'absolute') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 200 && r.height > 120 && r.bottom > 0 && r.top < innerHeight;
+  };
+  const roots = new Set();
+  const SEL = '[id*=cmp i],[class*=cmp i],[id*=consent i],[class*=consent i],'
+    + '[id*=cookie i],[class*=cookie i],[aria-modal=true],[role=dialog],dialog[open]';
+  for (const el of document.querySelectorAll(SEL)) {
+    if (blocks(el)) roots.add(el);
+  }
+  for (const root of roots) {
+    const BSEL = 'button,[role=button],input[type=button],input[type=submit]';
+    const buttons = [...root.querySelectorAll(BSEL)];
+    const hit = buttons.find((b) => {
+      const t = (b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+      const r = b.getBoundingClientRect();
+      return ACCEPT.test(t) && r.width > 1 && r.height > 1;
+    });
+    if (hit) {
+      const label = (hit.innerText || hit.value || hit.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+      hit.click();
+      const cls = typeof root.className === 'string' ? root.className.trim().split(/\\s+/)[0] : '';
+      const id = root.id ? '#' + root.id : (cls ? '.' + cls : root.tagName.toLowerCase());
+      return {gate: id, button: label.slice(0, 40)};
+    }
+  }
+  return null;
+}"""
+
+
 def cdp_endpoint() -> str:
     return os.getenv("BROWSER_CDP_HTTP") or os.getenv("ABR_CDP_HTTP") or DEFAULT_CDP_HTTP
 
@@ -289,6 +326,12 @@ class Tab:
             await locator.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
         except PlaywrightError:
             pass
+        dismissed = await self._dismiss_gate()
+        if dismissed:
+            try:
+                await locator.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
+            except PlaywrightError:
+                pass
         cleared = await self._clear_obstruction(locator)
         try:
             await locator.click(timeout=_ACTION_TIMEOUT_MS)
@@ -314,8 +357,12 @@ class Tab:
             pass
         await self.settle()
         outcome = await self._outcome(before, "clicked")
-        if cleared and outcome == "clicked":
-            outcome = f"clicked (after clearing an overlay: {_summarize_cleared(cleared)})"
+        if dismissed and outcome == "clicked":
+            outcome = f"clicked (after dismissing {dismissed})"
+        elif cleared and outcome == "clicked":
+            outcome = f"clicked (after suppressing an overlay: {_summarize_cleared(cleared)}; "
+            outcome += "a blocking gate may still be active)"
+
         if outcome == "clicked" and href and self.page is page and not await self._url_changed(page, url_before):
             followed = await self.open(href)
             return (
@@ -324,6 +371,17 @@ class Tab:
                 else "clicked (link did not navigate; opened its target directly)"
             )
         return outcome
+
+    async def _dismiss_gate(self) -> str:
+        page = await self.ensure()
+        try:
+            hit = await page.evaluate(_DISMISS_GATE_JS)
+        except PlaywrightError:
+            return ""
+        if not hit:
+            return ""
+        await self.settle()
+        return f"{hit.get('gate', 'a gate')} via '{hit.get('button', '')}'"
 
     async def _clear_obstruction(self, locator: Any) -> str:
         try:
