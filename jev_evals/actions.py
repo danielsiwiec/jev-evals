@@ -29,6 +29,7 @@ _VALUE_LEN = 120
 _TEXT_EXCERPT = 1800
 _NAME_LEN = 80
 _HISTORY_WINDOW = 10
+_VALUE_FOR = "value_for_"
 
 
 @dataclass(frozen=True)
@@ -242,6 +243,16 @@ def build_questions(values: dict[str, str], elements: list[Element], style: str 
             ),
             criteria=dict.fromkeys(values),
         )
+        for element in elements:
+            if element.typeable or element.selectable:
+                questions[f"{_VALUE_FOR}{element.ref}"] = Choice(
+                    instructions=(
+                        f"The field labelled '{element.name or element.kind}' is about to be filled. "
+                        "Which of `available_values` is the value for that field? Judge by the field's own "
+                        "label alone, ignoring which value the goal mentions first."
+                    ),
+                    criteria=dict.fromkeys(values),
+                )
     return questions
 
 
@@ -298,6 +309,10 @@ def parse_decision(answers: dict[str, Any]) -> Decision:
             targets[name] = (int(answer.choice), float(getattr(answer, "confidence", 0.0) or 0.0))
     chosen = str(action.choice)
     target, confidence = targets.get(chosen, (None, 0.0))
+    if chosen in VALUE_ACTIONS and target is not None:
+        per_field = answers.get(f"{_VALUE_FOR}{target}")
+        if per_field is not None:
+            value = per_field
     return Decision(
         action=chosen,
         target=target,

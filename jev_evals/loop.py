@@ -104,6 +104,8 @@ async def run_goal(
             decision = await decider.decide(state, values, candidates, usage)
             if decision.action == "done" and decision.goal_met < _DONE_AGREEMENT:
                 decision = decision.without("done")
+            if decision.action in TARGET_ACTIONS and observation.find(decision.target or -1) is None:
+                decision = decision.without(decision.action)
             if decision.action in VALUE_ACTIONS and decision.value not in values and decision.text:
                 values = {**values, "typed": decision.text}
                 decision = replace(decision, value="typed")
