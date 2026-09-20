@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Multi-field form that re-renders on submit</title>
+<body style="margin:0;font:16px system-ui;padding:24px">
+<h1>Rate search</h1>
+<form id="f" onsubmit="event.preventDefault(); reset_others()">
+  <label for="pv">Property value</label><input id="pv" value="830,000">
+  <label for="lb">Loan balance</label><input id="lb" value="498,000">
+  <button type="submit">Update filters</button>
+</form>
+<script>
+  // Submitting with one field filled discards the others, as the real page does.
+  function reset_others(){
+    document.title = 'SUBMITTED';
+    for (const el of [pv, lb]) if (!el.dataset.committed) el.value = el.defaultValue;
+  }
+  for (const el of [pv, lb]) el.addEventListener('change', () => { el.dataset.committed = '1'; });
+</script>

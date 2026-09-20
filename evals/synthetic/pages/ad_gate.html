@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ad gate with no dismissal</title>
+<body style="margin:0;font:16px system-ui">
+<h1>The Economist USA</h1>
+<button id="dl" style="position:absolute;top:340px;left:300px;width:230px;height:46px"
+        onclick="document.title = 'DOWNLOAD_STARTED'">Download PDF Magazine</button>
+
+<div class="fc-message-root" style="position:static">
+  <div class="fc-dialog-overlay" style="position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.5)"></div>
+  <div class="fc-dialog-container"
+       style="position:fixed;top:120px;left:140px;width:620px;height:320px;z-index:2147483647;background:#fff;padding:24px">
+    <h2>Unlock more content</h2>
+    <p class="fc-dialog-body-text">Take action to continue accessing the content on this site</p>
+    <button class="fc-rewarded-ad-button" style="width:320px;height:48px"
+            onclick="document.title = 'AD_WATCHED'">View a short ad — Site-wide access for 24 hours</button>
+  </div>
+</div>

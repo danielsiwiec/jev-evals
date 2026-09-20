@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ad that plays for a few seconds before the download unlocks</title>
+<style>
+  body{margin:0;font:16px system-ui}
+  #ad{display:none;position:fixed;inset:0;z-index:99;background:#111;color:#fff;
+      text-align:center;padding-top:200px}
+  #ad.playing{display:block}
+  .fc-dialog-overlay{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.5)}
+  .fc-dialog-container{position:fixed;top:120px;left:140px;width:620px;height:300px;
+                       z-index:91;background:#fff;padding:24px}
+</style>
+<body>
+<h1>The Economist USA</h1>
+<button id="dl" style="position:absolute;top:400px;left:300px;width:230px;height:46px"
+        onclick="document.title = window.unlocked ? 'DOWNLOAD_STARTED' : 'BLOCKED_BY_AD'">
+  Download PDF Magazine</button>
+
+<div class="fc-message-root" id="gate">
+  <div class="fc-dialog-overlay"></div>
+  <div class="fc-dialog-container">
+    <h2>Unlock more content</h2>
+    <p class="fc-dialog-body-text">Take action to continue accessing the content on this site</p>
+    <button class="fc-rewarded-ad-button" id="watch" style="width:340px;height:48px">
+      View a short ad — Site-wide access for 24 hours</button>
+  </div>
+</div>
+
+<div id="ad"><h2>Advertisement</h2><p id="left"></p></div>
+
+<script>
+  // Seconds the ad runs for; the page is unusable until it finishes.
+  const SECONDS = Number(new URLSearchParams(location.search).get('seconds') || 4);
+  window.unlocked = false;
+  document.getElementById('watch').onclick = () => {
+    gate.remove();
+    ad.classList.add('playing');
+    document.title = 'AD_PLAYING';
+    let remaining = SECONDS;
+    left.textContent = remaining + 's remaining';
+    const tick = setInterval(() => {
+      remaining -= 1;
+      left.textContent = remaining + 's remaining';
+      if (remaining <= 0) {
+        clearInterval(tick);
+        ad.classList.remove('playing');
+        window.unlocked = true;
+        document.title = 'AD_FINISHED';
+      }
+    }, 1000);
+  };
+</script>

@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Zero-point filter buried behind a filters panel</title>
+<style>
+  body{margin:0;font:16px system-ui}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+           overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .opt{display:inline-block;width:90px;height:47px;line-height:47px;text-align:center;
+       border:1px solid #888;margin-right:8px;cursor:pointer}
+  input:checked + .opt{background:#cde;font-weight:700}
+  #panel{display:none;position:fixed;top:40px;left:80px;width:720px;height:560px;
+         background:#fff;border:2px solid #333;padding:20px;overflow:auto;z-index:50}
+  #panel.open{display:block}
+  .more{display:none}
+  .more.shown{display:block}
+</style>
+<body>
+<h1>Compare refinance rates</h1>
+<p>Rates as of today. Adjust your details to see personalised offers.</p>
+
+<button id="open">Open more filters</button>
+
+<table border="1" cellpadding="6" style="margin-top:16px">
+  <tr><th>Lender</th><th>Rate</th><th>APR</th><th>Points</th></tr>
+  <tbody id="rows"></tbody>
+</table>
+
+<div id="panel" role="dialog" aria-modal="true">
+  <h2>More filters</h2>
+  <button id="close">Close</button>
+
+  <h3>Loan term</h3>
+  <label><input type="checkbox" checked> 30 year fixed</label>
+  <label><input type="checkbox"> 15 year fixed</label>
+
+  <button id="showmore">Show more</button>
+  <div class="more" id="more">
+    <h3>Loan type</h3>
+    <label><input type="radio" name="fha"> FHA</label>
+    <label><input type="radio" name="fha" checked> Conventional</label>
+
+    <h3>Points <button id="pointshelp" type="button">How points are used</button></h3>
+    <form id="pts">
+      <input class="sr-only" type="radio" name="pointsRange" id="p-all" value="ALL" checked>
+      <label class="opt" for="p-all">All</label>
+      <input class="sr-only" type="radio" name="pointsRange" id="p-zero" value="ZERO">
+      <label class="opt" for="p-zero">0</label>
+      <input class="sr-only" type="radio" name="pointsRange" id="p-onetwo" value="ONE_TO_TWO">
+      <label class="opt" for="p-onetwo">1-2</label>
+    </form>
+  </div>
+
+  <p style="margin-top:24px"><button id="update">Update</button></p>
+</div>
+
+<script>
+  const OFFERS = [
+    {lender:'Generic Savings Bank', rate:'6.125%', apr:'6.201%', points:1.5},
+    {lender:'Harbour Lending',      rate:'6.402%', apr:'6.455%', points:0.8},
+    {lender:'Optimum First Mortgage', rate:'6.624%', apr:'6.658%', points:0},
+    {lender:'Sage Home Loans',      rate:'6.710%', apr:'6.744%', points:0},
+  ];
+  let filter = 'ALL';
+  const $ = id => document.getElementById(id);
+  function render(){
+    const shown = filter === 'ZERO' ? OFFERS.filter(o => o.points === 0) : OFFERS;
+    $('rows').innerHTML = shown.map(o =>
+      `<tr><td>${o.lender}</td><td>${o.rate}</td><td>${o.apr}</td><td>Points: ${o.points}</td></tr>`
+    ).join('');
+    // The goal is met only when the table lists zero-point offers alone.
+    document.title = filter === 'ZERO' ? 'FILTERED_ZERO_POINT' : 'UNFILTERED';
+  }
+  $('open').onclick = () => $('panel').classList.add('open');
+  $('close').onclick = () => $('panel').classList.remove('open');
+  $('showmore').onclick = () => $('more').classList.add('shown');
+  $('pointshelp').onclick = () => { document.title = 'HELP_OPENED'; };
+  $('update').onclick = () => {
+    filter = document.querySelector('input[name=pointsRange]:checked').value;
+    $('panel').classList.remove('open');
+    render();
+  };
+  render();
+</script>

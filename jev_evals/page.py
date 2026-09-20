@@ -15,37 +15,28 @@ DEFAULT_CDP_HTTP = "http://192.168.65.254:9222"
 _OBSERVE_JS = (Path(__file__).parent / "observe.js").read_text()
 _NAV_TIMEOUT_MS = 30_000
 _ACTION_TIMEOUT_MS = 8_000
+_CLICK_TIMEOUT_MS = 2_000
+_LABEL_PROXY_JS = """el => {
+  const r = el.getBoundingClientRect();
+  if (r.width > 1 && r.height > 1) return false;
+  const lbl = (el.labels && el.labels[0])
+    || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`));
+  if (!lbl) return false;
+  const lr = lbl.getBoundingClientRect();
+  if (!(lr.width > 1 && lr.height > 1)) return false;
+  for (const old of document.querySelectorAll('[data-synthia-proxy]')) {
+    old.removeAttribute('data-synthia-proxy');
+  }
+  lbl.setAttribute('data-synthia-proxy', '1');
+  lbl.scrollIntoView({block: 'center', inline: 'center'});
+  return true;
+}"""
 _SETTLE_MS = 800
 _OBSERVE_TIMEOUT_S = 15.0
 _EVAL_TIMEOUT_S = 30.0
 _SCROLL_FRACTION = 0.8
 _DOWNLOAD_ERROR = re.compile(r"Download is starting", re.I)
-_RESTORE_OBSTRUCTION_JS = """() => {
-  for (const el of document.querySelectorAll('[data-synthia-cleared]')) {
-    const previous = el.getAttribute('data-synthia-cleared');
-    if (previous) el.style.setProperty('pointer-events', previous); else el.style.removeProperty('pointer-events');
-    el.removeAttribute('data-synthia-cleared');
-  }
-}"""
-_CLEAR_OBSTRUCTION_JS = """el => {
-  el.scrollIntoView({block: 'center', inline: 'center'});
-  const r = el.getBoundingClientRect();
-  const x = r.left + r.width / 2, y = r.top + r.height / 2;
-  const cleared = [];
-  for (let i = 0; i < 6; i++) {
-    const top = document.elementFromPoint(x, y);
-    if (!top || top === el || el.contains(top) || top.contains(el)) break;
-    let block = top;
-    while (block.parentElement && block.parentElement !== document.body && !block.parentElement.contains(el)) {
-      block = block.parentElement;
-    }
-    block.setAttribute('data-synthia-cleared', block.style.getPropertyValue('pointer-events') || '');
-    block.style.setProperty('pointer-events', 'none', 'important');
-    const cls = typeof block.className === 'string' ? block.className.trim().split(/\\s+/)[0] : '';
-    cleared.push(block.tagName.toLowerCase() + (block.id ? '#' + block.id : '') + (cls ? '.' + cls : ''));
-  }
-  return cleared;
-}"""
+
 
 _ENTER_SUBMITS_JS = """el => {
   const form = el.closest('form');
@@ -59,43 +50,6 @@ _ENTER_SUBMITS_JS = """el => {
 _COMMIT_VALUE_JS = """el => {
   el.dispatchEvent(new Event('change', {bubbles: true}));
   el.blur();
-}"""
-
-
-_DISMISS_GATE_JS = """() => {
-  const ACCEPT = new RegExp('^(accept|agree|allow|confirm|got it|ok|okay|i agree|accept all'
-    + '|allow all|continue|save (and|&) exit|reject all|decline all|disagree'
-    + '|continue without)', 'i');
-  const blocks = (el) => {
-    const st = getComputedStyle(el);
-    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    if (st.position !== 'fixed' && st.position !== 'absolute') return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 200 && r.height > 120 && r.bottom > 0 && r.top < innerHeight;
-  };
-  const roots = new Set();
-  const SEL = '[id*=cmp i],[class*=cmp i],[id*=consent i],[class*=consent i],'
-    + '[id*=cookie i],[class*=cookie i],[aria-modal=true],[role=dialog],dialog[open]';
-  for (const el of document.querySelectorAll(SEL)) {
-    if (blocks(el)) roots.add(el);
-  }
-  for (const root of roots) {
-    const BSEL = 'button,[role=button],input[type=button],input[type=submit]';
-    const buttons = [...root.querySelectorAll(BSEL)];
-    const hit = buttons.find((b) => {
-      const t = (b.innerText || b.value || b.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
-      const r = b.getBoundingClientRect();
-      return ACCEPT.test(t) && r.width > 1 && r.height > 1;
-    });
-    if (hit) {
-      const label = (hit.innerText || hit.value || hit.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
-      hit.click();
-      const cls = typeof root.className === 'string' ? root.className.trim().split(/\\s+/)[0] : '';
-      const id = root.id ? '#' + root.id : (cls ? '.' + cls : root.tagName.toLowerCase());
-      return {gate: id, button: label.slice(0, 40)};
-    }
-  }
-  return null;
 }"""
 
 
@@ -322,47 +276,26 @@ class Tab:
         url_before = page.url
         locator = self._locator(ref)
         href = await self._link_target(locator)
+        target = await self._clickable(locator)
         try:
-            await locator.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
+            await target.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
         except PlaywrightError:
             pass
-        dismissed = await self._dismiss_gate()
-        if dismissed:
-            try:
-                await locator.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
-            except PlaywrightError:
-                pass
-        cleared = await self._clear_obstruction(locator)
         try:
-            await locator.click(timeout=_ACTION_TIMEOUT_MS)
+            await target.click(timeout=_CLICK_TIMEOUT_MS)
         except PlaywrightError as error:
             if _DOWNLOAD_ERROR.search(str(error)):
                 return "download started"
-            cleared = ", ".join(c for c in (cleared, await self._clear_obstruction(locator)) if c)
-            try:
-                await locator.click(timeout=_ACTION_TIMEOUT_MS)
-            except PlaywrightError as retry:
-                if _DOWNLOAD_ERROR.search(str(retry)):
-                    return "download started"
-                try:
-                    await locator.evaluate("el => el.click()")
-                except PlaywrightError as scripted:
-                    return f"click failed: {_short(scripted)}"
-        finally:
-            if cleared:
-                await self._restore_obstruction(page)
+            blocker = _intercepted_by(str(error))
+            if blocker:
+                return f"click blocked: {blocker} is on top of this element and took the click instead"
+            return f"click failed: {_short(error)}"
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=_SETTLE_MS * 2)
         except PlaywrightError:
             pass
         await self.settle()
         outcome = await self._outcome(before, "clicked")
-        if dismissed and outcome == "clicked":
-            outcome = f"clicked (after dismissing {dismissed})"
-        elif cleared and outcome == "clicked":
-            outcome = f"clicked (after suppressing an overlay: {_summarize_cleared(cleared)}; "
-            outcome += "a blocking gate may still be active)"
-
         if outcome == "clicked" and href and self.page is page and not await self._url_changed(page, url_before):
             followed = await self.open(href)
             return (
@@ -372,23 +305,15 @@ class Tab:
             )
         return outcome
 
-    async def _dismiss_gate(self) -> str:
-        page = await self.ensure()
+    async def _clickable(self, locator: Any) -> Any:
+        assert self._page is not None
         try:
-            hit = await page.evaluate(_DISMISS_GATE_JS)
+            proxied = await locator.evaluate(_LABEL_PROXY_JS, timeout=_ACTION_TIMEOUT_MS)
         except PlaywrightError:
-            return ""
-        if not hit:
-            return ""
-        await self.settle()
-        return f"{hit.get('gate', 'a gate')} via '{hit.get('button', '')}'"
-
-    async def _clear_obstruction(self, locator: Any) -> str:
-        try:
-            cleared = await locator.evaluate(_CLEAR_OBSTRUCTION_JS, timeout=_ACTION_TIMEOUT_MS)
-        except PlaywrightError:
-            return ""
-        return ", ".join(str(c) for c in (cleared or []))[:120]
+            return locator
+        if not proxied:
+            return locator
+        return self._page.locator("[data-synthia-proxy='1']").first
 
     async def _url_changed(self, page: Page, url_before: str, grace_s: float = 1.5) -> bool:
         deadline = asyncio.get_event_loop().time() + grace_s
@@ -397,12 +322,6 @@ class Tab:
                 return False
             await asyncio.sleep(0.1)
         return True
-
-    async def _restore_obstruction(self, page: Page) -> None:
-        try:
-            await page.evaluate(_RESTORE_OBSTRUCTION_JS)
-        except PlaywrightError:
-            pass
 
     async def _link_target(self, locator: Any) -> str:
         try:
@@ -421,12 +340,15 @@ class Tab:
         before = await self._siblings()
         locator = self._locator(ref)
         try:
-            await locator.fill(value, timeout=_ACTION_TIMEOUT_MS)
+            await locator.fill(value, timeout=_CLICK_TIMEOUT_MS)
             if submit and await self._enter_submits(locator):
                 await locator.press("Enter")
             else:
                 await locator.evaluate(_COMMIT_VALUE_JS)
         except PlaywrightError as error:
+            blocker = _intercepted_by(str(error))
+            if blocker:
+                return f"type blocked: {blocker} is on top of this field and took the input instead"
             return f"type failed: {_short(error)}"
         await self.settle()
         outcome = await self._outcome(before, "typed")
@@ -542,12 +464,16 @@ def _busy_observation(url: str, timeout_s: float) -> dict[str, Any]:
     }
 
 
-def _summarize_cleared(cleared: str) -> str:
-    parts = [p.strip() for p in cleared.split(",") if p.strip()]
-    unique = list(dict.fromkeys(parts))
-    if len(parts) > len(unique):
-        return f"{len(parts)} overlays ({', '.join(unique[:3])})"
-    return ", ".join(unique[:4]) + (f" +{len(unique) - 4} more" if len(unique) > 4 else "")
+def _intercepted_by(message: str) -> str:
+    line = next((ln for ln in message.splitlines() if "intercepts pointer events" in ln), "")
+    if not line:
+        return ""
+    tags = re.findall(r'<([a-z0-9]+)((?:\s+[a-z-]+="[^"]*")*)', line, re.I)
+    if not tags:
+        return "another element"
+    name, attrs = tags[-1]
+    ident = re.search(r'(?:id|class)="([^"]+)"', attrs or "")
+    return f"{name.lower()}.{ident.group(1).split()[0]}" if ident else name.lower()
 
 
 def _same_value(actual: str, wanted: str) -> bool:

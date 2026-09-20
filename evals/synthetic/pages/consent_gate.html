@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Consent gate over a download button</title>
+<body style="margin:0;font:16px system-ui">
+<script>window.consented = false</script>
+<h1>Shared file</h1>
+<button id="dl" style="position:absolute;top:320px;left:300px;width:170px;height:46px"
+        onclick="document.title = window.consented ? 'DOWNLOAD_STARTED' : 'BLOCKED_BY_CONSENT'">
+  Download</button>
+
+<div id="qc-cmp2-container" class="qc-cmp2-container"
+     style="position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55)">
+  <div style="position:absolute;top:70px;left:110px;width:700px;height:470px;background:#fff;padding:24px">
+    <h2>Do Not Process My Personal Information</h2>
+    <p>If you wish to opt-out of the sale, sharing to third parties, or processing of your
+       personal information for targeted advertising, use the opt-out section below.</p>
+    <button style="width:220px;height:44px"
+            onclick="window.consented = true; document.getElementById('qc-cmp2-container').remove()">
+      CONFIRM</button>
+  </div>
+</div>

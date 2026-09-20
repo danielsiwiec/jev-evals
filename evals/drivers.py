@@ -1,7 +1,13 @@
 import asyncio
+import contextlib
 import os
+import shutil
+import socket
+import tempfile
 import time
 from typing import Any
+
+import httpx
 
 from jev_evals.decider import Decider, LlmDecider
 from jev_evals.jev import JevClient
@@ -13,6 +19,56 @@ CDP = os.getenv("BROWSER_CDP_HTTP", "http://localhost:9222")
 MAX_STEPS = int(os.getenv("EVAL_MAX_STEPS", "40"))
 TIMEOUT_S = float(os.getenv("EVAL_TIMEOUT_S", "300"))
 PARALLEL = os.getenv("EVAL_PARALLEL", "0").lower() in ("1", "true", "yes")
+FRESH_PROFILE = os.getenv("EVAL_FRESH_PROFILE", "1").lower() in ("1", "true", "yes")
+CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+_CHROME_START_S = 20.0
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+async def _await_cdp(endpoint: str, deadline: float) -> None:
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        while time.perf_counter() < deadline:
+            with contextlib.suppress(Exception):
+                if (await client.get(f"{endpoint}/json/version")).status_code == 200:
+                    return
+            await asyncio.sleep(0.25)
+    raise RuntimeError(f"chrome did not expose CDP at {endpoint}")
+
+
+@contextlib.asynccontextmanager
+async def fresh_chrome():
+    port = _free_port()
+    profile = tempfile.mkdtemp(prefix="chrome-eval-")
+    process = await asyncio.create_subprocess_exec(
+        CHROME,
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={profile}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--homepage=about:blank",
+        "about:blank",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    endpoint = f"http://127.0.0.1:{port}"
+    try:
+        await _await_cdp(endpoint, time.perf_counter() + _CHROME_START_S)
+        yield endpoint
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            process.terminate()
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(process.wait(), timeout=10)
+        if process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await process.wait()
+        shutil.rmtree(profile, ignore_errors=True)
 
 
 def rates(model: str) -> tuple[float, float, float]:
@@ -27,7 +83,16 @@ def rates(model: str) -> tuple[float, float, float]:
 
 
 async def run_driver(label: str, decider: Decider | JevClient, start_url: str, goal: str, values: dict[str, str]):
-    host = HostBrowser(CDP)
+    if not FRESH_PROFILE:
+        return await _drive(label, decider, CDP, start_url, goal, values)
+    async with fresh_chrome() as endpoint:
+        return await _drive(label, decider, endpoint, start_url, goal, values)
+
+
+async def _drive(
+    label: str, decider: Decider | JevClient, endpoint: str, start_url: str, goal: str, values: dict[str, str]
+):
+    host = HostBrowser(endpoint)
     tab = Tab(host)
     started = time.perf_counter()
     try:

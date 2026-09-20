@@ -2,17 +2,61 @@
 
 Browser-agent evals comparing three models — `jev`, `gemini`, `luna` — on the same decision loop. See [README.md](README.md) for what they measure and how the pieces fit together.
 
-## Running the evals
+## The two eval suites
+
+**Synthetic step evals** — `make steps`. Offline HTML fixtures in [evals/synthetic/pages/](evals/synthetic/pages/),
+asserted by [evals/synthetic/test_steps.py](evals/synthetic/test_steps.py). No network, no API keys, headless,
+~40s for the whole suite. Each one pins a single harness contract: a consent gate is reported rather than
+suppressed, an `sr-only` radio is observable and clickable, typing does not submit a multi-field form.
+**Do most iteration here.** A harness change should be proven against a step eval before an e2e run.
+
+**Online evals** — `make steps-online` for steps, `make eval` for the full journeys.
+- Steps ([evals/online/test_steps.py](evals/online/test_steps.py)): small assertions against the real
+  Bankrate and freemagazines pages — the form is present, the points radios are observed, a typed value
+  sticks. They catch drift between a fixture and the site it models.
+- E2E ([evals/online/](evals/online/)): the two full journeys, download a PDF and find the best
+  zero-point rate. Slow, flaky, externally scored. Run them to confirm, not to iterate.
 
 ```bash
-make eval                                  # all drivers, both evals
-EVAL=evals/test_refinance.py make eval     # one eval
+make steps                                 # synthetic, offline, fast
+make steps-online                          # online steps against the real sites
+make eval                                  # both e2e journeys, all drivers
+EVAL=evals/online/test_refinance_e2e.py make eval
 EVAL_DRIVERS=jev,luna EVAL_RUNS=3 make eval
 ```
 
-`make eval` starts Chrome on CDP 9222 if it isn't already running and sources `.env` itself. Do not run `uv run pytest` directly for evals — nothing in the package auto-loads `.env`, so the keys will be missing and every driver will fail to authenticate.
+Every run launches its own Chrome on a free port with a throwaway profile and deletes it afterwards
+([evals/local_browser.py](evals/local_browser.py), `fresh_chrome`). That is deliberate: consent and ad
+gates are per-profile, so a shared browser lets whichever driver runs first clear the gate for everyone
+behind it. Set `EVAL_FRESH_PROFILE=0` to attach to an existing Chrome instead.
+
+`make eval` sources `.env` itself. Do not run `uv run pytest` directly for online evals — nothing
+auto-loads `.env`, so every driver fails to authenticate.
 
 If `uv` is not on PATH it lives at `~/.local/bin/uv`; the Makefile already resolves this.
+
+**Headless differs from headed.** Bankrate does not render its rate form under `--headless=new`: 76
+observed elements instead of 108, with Property value and Loan balance missing. Online evals therefore
+run headed (`headless=False`). Synthetic fixtures run headless.
+
+## Replicating a real page as a synthetic fixture
+
+When a real site breaks a run, reproduce it offline before fixing anything. Inspect first, guess never:
+
+1. **Catch it live.** These gates are per-profile and often one-shot, so use a brand-new profile
+   (`fresh_chrome`) and, if it still will not appear, the exact navigation path the eval takes rather
+   than a direct URL.
+2. **Inspect the real thing** — headed and headless, they differ. Record from the DOM: the blocking
+   element's id and class, its `position`, `z-index` and `getBoundingClientRect()`, every button inside
+   it with its exact text, and whether it sits in an iframe or shadow root. Check `curl` too: content
+   present in the HTML but absent from the DOM means client-side rendering, and vice versa.
+3. **Find the logical gate, not just the visual one.** The question that matters is whether the page
+   refuses to act while the gate is unresolved. A fixture that only covers the target will pass against
+   a broken harness — the first consent fixture written here did exactly that and proved nothing.
+4. **Write the fixture** in [evals/synthetic/pages/](evals/synthetic/pages/) reproducing those recorded
+   characteristics, and drive state through `document.title` so a test can assert what actually happened.
+5. **Prove it discriminates.** The new test must fail against the old harness and pass against the new
+   one. If it passes both, it is not testing what you think.
 
 ## Interpreting results
 
@@ -24,9 +68,23 @@ A single run on a live commercial site proves little — ad gates, cookie banner
 
 ## Known failure modes
 
-- **The form fight.** A model types a value, the page re-renders and discards it, and it types again. Shows up as one element ref repeating with different values while `stuck` climbs. The loop's repeat detector looks for an *unchanged* page, so a page that changes without progressing slips past it.
+Each of these has a synthetic fixture. Reproduce there before changing the harness.
+
+- **Consent and ad gates.** LimeWire shows a Quantcast consent dialog (`#qc-cmp2-container`) and
+  freemagazines an ad gate (`.fc-message-root`). Both leave the page *logically* gated: the button is
+  clickable but the app refuses to act. Suppressing the overlay defeats the cover, not the gate. The
+  harness reports `click blocked: <blocker> is on top of this element` and lets the model decide.
+  The ad gate's only control is "View a short ad" — the harness must never press it on its own.
+  Fixtures: `consent_gate.html`, `ad_gate.html`, `timed_ad_gate.html`.
+- **Controls hidden behind their label.** Bankrate's points filter is four `sr-only` radios, each a 1x1
+  input behind a 90x47 label that carries the visible text and takes the click. Observation falls back
+  to the label's box, or the control is invisible to the model and the goal unreachable.
+  Fixtures: `sr_only_radio.html`, `buried_filter.html`.
+- **The form fight.** A model types a value, the page re-renders and discards it. Pressing Enter on a
+  multi-field form submits it half-filled, which is what caused it. Fixture: `multi_field_form.html`.
 - **Premature done.** A model claims the goal is met on arrival. External scoring catches this.
-- **Download path mismatch.** The download eval watches `DOWNLOADS_DIR`, but Chrome writes to its own profile's download directory. On a fresh profile these differ and every run scores "no file" regardless of model.
+- **Download path mismatch.** The download eval watches `DOWNLOADS_DIR`; Chrome writes to its profile's
+  own directory. On a fresh profile these differ and every run scores "no file".
 
 ## Working on this repo
 
