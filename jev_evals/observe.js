@@ -8,12 +8,20 @@
   const MODAL = "[role=dialog], dialog[open], [aria-modal=true]";
   const vw = window.innerWidth, vh = window.innerHeight;
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
+  const proxy = (el) => {
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return null;
+    const lbl = (el.labels && el.labels[0]) || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`));
+    if (!lbl) return null;
+    const lr = lbl.getBoundingClientRect();
+    return lr.width > 1 && lr.height > 1 ? lr : null;
+  };
   const visible = (el) => {
     const st = getComputedStyle(el);
     if (st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     const r = el.getBoundingClientRect();
-    return r.width > 1 && r.height > 1 && r.bottom > -vh && r.top < vh * 3;
+    const box = (r.width > 1 && r.height > 1) ? r : proxy(el);
+    return !!box && box.bottom > -vh && box.top < vh * 3;
   };
   const nameOf = (el) => {
     const aria = el.getAttribute("aria-label");
@@ -74,7 +82,8 @@
   for (const el of document.body ? document.querySelectorAll(SELECTOR) : []) {
     if (seen.has(el) || !visible(el)) continue;
     seen.add(el);
-    const r = el.getBoundingClientRect();
+    const raw = el.getBoundingClientRect();
+    const r = (raw.width > 1 && raw.height > 1) ? raw : (proxy(el) || raw);
     const kind = kindOf(el);
     const name = nameOf(el);
     if (!name && kind === "link") continue;
