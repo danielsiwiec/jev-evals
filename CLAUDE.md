@@ -35,9 +35,13 @@ auto-loads `.env`, so every driver fails to authenticate.
 
 If `uv` is not on PATH it lives at `~/.local/bin/uv`; the Makefile already resolves this.
 
-**Headless differs from headed.** Bankrate does not render its rate form under `--headless=new`: 76
-observed elements instead of 108, with Property value and Loan balance missing. Online evals therefore
-run headed (`headless=False`). Synthetic fixtures run headless.
+**Window size changes what a responsive page renders.** At Chrome's default 800x600, Bankrate lays out
+without its rate form: 76 observed elements, no Property value or Loan balance. At 1440x900 the form is
+there and 110 elements are observed. Every launch therefore passes `--window-size` (`EVAL_WINDOW`,
+default `1440,900`). Headless is not the variable here and everything runs headless by default; when a
+missing element looks like bot detection, rule out viewport size first. A headed run
+(`EVAL_HEADLESS=0`, for watching a gate) parks its window off-screen at `EVAL_WINDOW_POSITION` with
+occlusion detection disabled, so it neither steals focus nor gets throttled for being hidden.
 
 ## Replicating a real page as a synthetic fixture
 
@@ -46,10 +50,11 @@ When a real site breaks a run, reproduce it offline before fixing anything. Insp
 1. **Catch it live.** These gates are per-profile and often one-shot, so use a brand-new profile
    (`fresh_chrome`) and, if it still will not appear, the exact navigation path the eval takes rather
    than a direct URL.
-2. **Inspect the real thing** — headed and headless, they differ. Record from the DOM: the blocking
-   element's id and class, its `position`, `z-index` and `getBoundingClientRect()`, every button inside
-   it with its exact text, and whether it sits in an iframe or shadow root. Check `curl` too: content
-   present in the HTML but absent from the DOM means client-side rendering, and vice versa.
+2. **Inspect the real thing.** Record from the DOM: the blocking element's id and class, its `position`,
+   `z-index` and `getBoundingClientRect()`, every button inside it with its exact text, and whether it
+   sits in an iframe or shadow root. Check `curl` too: content present in the HTML but absent from the
+   DOM means client-side rendering, and vice versa. Compare headed against headless only after fixing
+   the window size in both, or layout differences read as rendering differences.
 3. **Find the logical gate, not just the visual one.** The question that matters is whether the page
    refuses to act while the gate is unresolved. A fixture that only covers the target will pass against
    a broken harness — the first consent fixture written here did exactly that and proved nothing.

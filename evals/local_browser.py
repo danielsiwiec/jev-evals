@@ -13,6 +13,8 @@ from jev_evals.page import HostBrowser, Tab
 
 CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 HEADLESS = os.getenv("EVAL_HEADLESS", "1").lower() in ("1", "true", "yes")
+WINDOW = os.getenv("EVAL_WINDOW", "1440,900")
+OFFSCREEN = os.getenv("EVAL_WINDOW_POSITION", "-2400,0")
 _START_S = 20.0
 
 
@@ -34,9 +36,16 @@ async def fresh_chrome(headless: bool = HEADLESS):
         f"--user-data-dir={profile}",
         "--no-first-run",
         "--no-default-browser-check",
+        f"--window-size={WINDOW}",
     ]
     if headless:
         flags.append("--headless=new")
+    else:
+        # Keep a headed window off the active desktop so it cannot steal focus.
+        flags += [
+            "--window-position=-2400,0",
+            "--no-startup-window" if False else "--disable-features=CalculateNativeWinOcclusion",
+        ]
     process = await asyncio.create_subprocess_exec(
         CHROME,
         *flags,
