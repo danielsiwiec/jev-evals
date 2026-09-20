@@ -2,27 +2,32 @@
 
 Browser-agent evals comparing three models — `jev`, `gemini`, `luna` — on the same decision loop. See [README.md](README.md) for what they measure and how the pieces fit together.
 
-## The two eval suites
+## The eval suites
 
-**Synthetic step evals** — `make steps`. Offline HTML fixtures in [evals/synthetic/pages/](evals/synthetic/pages/),
-asserted by [evals/synthetic/test_steps.py](evals/synthetic/test_steps.py). No network, no API keys, headless,
-~40s for the whole suite. Each one pins a single harness contract: a consent gate is reported rather than
-suppressed, an `sr-only` radio is observable and clickable, typing does not submit a multi-field form.
-**Do most iteration here.** A harness change should be proven against a step eval before an e2e run.
+Two axes: **offline** (our own HTML fixtures) against **online** (real sites), and **unit**
+(one behaviour per test) against **e2e** (a whole journey, model in the loop).
 
-**Online evals** — `make steps-online` for steps, `make eval` for the full journeys.
-- Steps ([evals/online/test_steps.py](evals/online/test_steps.py)): small assertions against the real
-  Bankrate and freemagazines pages — the form is present, the points radios are observed, a typed value
-  sticks. They catch drift between a fixture and the site it models.
-- E2E ([evals/online/](evals/online/)): the two full journeys, download a PDF and find the best
-  zero-point rate. Slow, flaky, externally scored. Run them to confirm, not to iterate.
+**Offline unit** — `make unit`. Fixtures in [evals/offline/pages/](evals/offline/pages/), asserted by
+[evals/offline/test_unit.py](evals/offline/test_unit.py). No network, no keys, headless, ~40s. Each
+pins one harness contract: a consent gate is reported rather than suppressed, an `sr-only` radio is
+observable and clickable, typing does not submit a multi-field form. **Do most iteration here.**
+
+**Online unit** — `make unit-online`. Small assertions against the real Bankrate, freemagazines and
+LimeWire pages, ~27s. These exist to keep the offline fixtures honest, so several of them are
+*validity guards*: they assert the real page still has the property its fixture models — the
+consent gate still appears on a fresh profile, the points input is still a 1x1 box behind a rendered
+label. A guard failing does not mean the harness regressed; it means the fixture now models something
+the site no longer does. Those assertions fail with `ONLINE EVAL NO LONGER VALID`, and the fix is to
+re-inspect the page and update the test and its fixture together.
+
+**E2E** — `make e2e` (alias `make eval`). The two full journeys, download a PDF and find the best
+zero-point rate, scored externally. Slow and genuinely flaky. Run to confirm, not to iterate.
 
 ```bash
-make steps                                 # synthetic, offline, fast
-make steps-online                          # online steps against the real sites
-make eval                                  # both e2e journeys, all drivers
-EVAL=evals/online/test_refinance_e2e.py make eval
-EVAL_DRIVERS=jev,luna EVAL_RUNS=3 make eval
+make unit                                  # offline fixtures, fast
+make unit-online                           # real pages, incl. fixture validity guards
+make e2e                                   # both journeys, all drivers
+EVAL=evals/online/test_refinance_e2e.py EVAL_DRIVERS=jev EVAL_RUNS=3 make e2e
 ```
 
 Every run launches its own Chrome on a free port with a throwaway profile and deletes it afterwards
@@ -30,20 +35,12 @@ Every run launches its own Chrome on a free port with a throwaway profile and de
 gates are per-profile, so a shared browser lets whichever driver runs first clear the gate for everyone
 behind it. Set `EVAL_FRESH_PROFILE=0` to attach to an existing Chrome instead.
 
-`make eval` sources `.env` itself. Do not run `uv run pytest` directly for online evals — nothing
+`make e2e` sources `.env` itself. Do not run `uv run pytest` directly for online evals — nothing
 auto-loads `.env`, so every driver fails to authenticate.
 
 If `uv` is not on PATH it lives at `~/.local/bin/uv`; the Makefile already resolves this.
 
-**Window size changes what a responsive page renders.** At Chrome's default 800x600, Bankrate lays out
-without its rate form: 76 observed elements, no Property value or Loan balance. At 1440x900 the form is
-there and 110 elements are observed. Every launch therefore passes `--window-size` (`EVAL_WINDOW`,
-default `1440,900`). Headless is not the variable here and everything runs headless by default; when a
-missing element looks like bot detection, rule out viewport size first. A headed run
-(`EVAL_HEADLESS=0`, for watching a gate) parks its window off-screen at `EVAL_WINDOW_POSITION` with
-occlusion detection disabled, so it neither steals focus nor gets throttled for being hidden.
-
-## Replicating a real page as a synthetic fixture
+## Replicating a real page as an offline fixture
 
 When a real site breaks a run, reproduce it offline before fixing anything. Inspect first, guess never:
 
@@ -58,8 +55,10 @@ When a real site breaks a run, reproduce it offline before fixing anything. Insp
 3. **Find the logical gate, not just the visual one.** The question that matters is whether the page
    refuses to act while the gate is unresolved. A fixture that only covers the target will pass against
    a broken harness — the first consent fixture written here did exactly that and proved nothing.
-4. **Write the fixture** in [evals/synthetic/pages/](evals/synthetic/pages/) reproducing those recorded
+4. **Write the fixture** in [evals/offline/pages/](evals/offline/pages/) reproducing those recorded
    characteristics, and drive state through `document.title` so a test can assert what actually happened.
+   Pair it with a validity guard in [evals/online/test_unit.py](evals/online/test_unit.py) asserting the
+   real page still has the property you just modelled, so the fixture cannot quietly drift out of date.
 5. **Prove it discriminates.** The new test must fail against the old harness and pass against the new
    one. If it passes both, it is not testing what you think.
 
@@ -73,7 +72,7 @@ A single run on a live commercial site proves little — ad gates, cookie banner
 
 ## Known failure modes
 
-Each of these has a synthetic fixture. Reproduce there before changing the harness.
+Each of these has an offline fixture. Reproduce there before changing the harness.
 
 - **Consent and ad gates.** LimeWire shows a Quantcast consent dialog (`#qc-cmp2-container`) and
   freemagazines an ad gate (`.fc-message-root`). Both leave the page *logically* gated: the button is
