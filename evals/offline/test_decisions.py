@@ -223,3 +223,38 @@ async def test_jev_prefers_span_filling_for_a_search_and_composing_for_an_invent
     assert signup.get("compose", 0) > signup.get("type", 0), (
         f"an email address is not in the goal and must be composed: {signup}"
     )
+
+
+async def test_efficiency_separates_a_clean_run_from_a_thrashing_one():
+    """The metric has to discriminate, or it is decoration.
+
+    Both traces reach for the same goal; one wanders. Judged with hindsight over the whole
+    sequence, the clean run must score materially higher.
+    """
+    from peregrine.efficiency import judge
+
+    clean = [
+        "1. type #28 textbox 'Property value' with property value='950000' -> typed",
+        "2. type #31 textbox 'Loan balance' with loan amount='600000' -> typed",
+        "3. click #33 button 'Update filters' -> clicked",
+        "4. click #117 radio '0' [in dialog] -> clicked",
+        "5. click #125 button 'Update' [in dialog] -> clicked",
+    ]
+    thrashing = clean + [
+        "6. show_more -> showing the next part of elements",
+        "7. show_more -> showing the next part of elements",
+        "8. click #39 button 'See offers from a lender' -> opened new tab",
+        "9. select #8 'Credit score' with credit score='800' -> select failed: Timeout",
+        "10. select #8 'Credit score' with credit score='800' -> select failed: Timeout",
+    ]
+    good = await judge(RATE_GOAL, clean)
+    bad = await judge(RATE_GOAL, thrashing)
+    assert good.ratio > bad.ratio + 0.2, f"clean={good} thrashing={bad}"
+    assert bad.wasted, "a thrashing run must name the actions that were wasted"
+
+
+async def test_efficiency_of_no_actions_is_not_a_crash():
+    from peregrine.efficiency import judge
+
+    empty = await judge(RATE_GOAL, [])
+    assert empty.total == 0 and empty.ratio == 0.0

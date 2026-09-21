@@ -5,8 +5,8 @@ def render(rows: list[dict], header: str, columns: list[tuple[str, str]]) -> str
     names = ["run", "driver", "status"] + [c[0] for c in columns]
     keys = ["run", "driver", "status"] + [c[1] for c in columns]
     tail = ["seconds", "model_calls", "model_ms", "input_tokens", "output_tokens"]
-    names += ["seconds", "calls", "mean ms", "in tok", "out tok", "cost USD"]
-    keys += tail + ["cost_usd"]
+    names += ["eff", "seconds", "calls", "mean ms", "in tok", "out tok", "cost USD"]
+    keys += ["efficiency"] + tail + ["cost_usd"]
     lines = ["", header, "| " + " | ".join(names) + " |", "|" + "---|" * len(names)]
     for row in rows:
         cells = []
@@ -16,10 +16,12 @@ def render(rows: list[dict], header: str, columns: list[tuple[str, str]]) -> str
                 value = "yes" if value else "no"
             elif key == "cost_usd" and isinstance(value, (int, float)):
                 value = f"{value:.6f}"
+            elif key == "efficiency":
+                value = f"{value:.0%}" if isinstance(value, float) else "-"
             cells.append(str(value))
         lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
-    lines.append("| driver | found | 95% CI | median s | p90 s | mean cost | mean calls |")
+    lines.append("| driver | found | 95% CI | efficiency | median s | p90 s | mean cost |")
     lines.append("|---|---|---|---|---|---|---|")
     for driver in dict.fromkeys(r["driver"] for r in rows):
         group = [r for r in rows if r["driver"] == driver]
@@ -30,10 +32,12 @@ def render(rows: list[dict], header: str, columns: list[tuple[str, str]]) -> str
 
         rate = pass_rate(len(ok), len(group))
         timing = summarise([r["seconds"] for r in group])
+        scored = [r["efficiency"] for r in group if r.get("efficiency") is not None]
+        efficiency = f"{sum(scored) / len(scored) * 100:.0f}%" if scored else "-"
         lines.append(
             f"| {driver} | {len(ok)}/{len(group)} | {rate.low * 100:.0f}-{rate.high * 100:.0f}% "
-            f"| {timing.get('median', 0):.1f} | {timing.get('p90', 0):.1f} "
-            f"| {mean('cost_usd', group):.5f} | {mean('model_calls', group):.1f} |"
+            f"| {efficiency} | {timing.get('median', 0):.1f} | {timing.get('p90', 0):.1f} "
+            f"| {mean('cost_usd', group):.5f} |"
         )
     runs = len(rows) // max(len({r["driver"] for r in rows}), 1)
     if runs < runs_needed(0.20):

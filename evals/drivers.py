@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from peregrine.decider import Decider, LlmDecider
+from peregrine.efficiency import judge
 from peregrine.jev import JevClient
 from peregrine.loop import run_goal
 from peregrine.models import GEMINI_MODEL, JEV_MODEL_SPEC, LUNA_MODEL
@@ -19,6 +20,8 @@ CDP = os.getenv("BROWSER_CDP_HTTP", "http://localhost:9222")
 MAX_STEPS = int(os.getenv("EVAL_MAX_STEPS", "40"))
 TIMEOUT_S = float(os.getenv("EVAL_TIMEOUT_S", "300"))
 PARALLEL = int(os.getenv("EVAL_PARALLEL", "1"))
+# Judging costs about $0.00006 a run, so it is on unless explicitly turned off.
+EFFICIENCY = os.getenv("EVAL_EFFICIENCY", "1").lower() in ("1", "true", "yes")
 FRESH_PROFILE = os.getenv("EVAL_FRESH_PROFILE", "1").lower() in ("1", "true", "yes")
 CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 _CHROME_START_S = 20.0
@@ -103,8 +106,11 @@ async def _drive(
         await host.close()
         if isinstance(decider, JevClient):
             await decider.close()
+    efficiency = await judge(goal, result.steps) if EFFICIENCY else None
     return {
         "driver": label,
+        "efficiency": efficiency.ratio if efficiency else None,
+        "wasted": len(efficiency.wasted) if efficiency else None,
         "status": result.status,
         "seconds": round(time.perf_counter() - started, 1),
         "model_calls": result.jev_calls,

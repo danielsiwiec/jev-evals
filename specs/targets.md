@@ -100,6 +100,34 @@ run.
 Headless remains the default and costs nothing: at n=25 both modes scored 22/25, with medians of 8.0s
 and 8.6s. Use headed when you want to watch; use headless when you want the machine.
 
+## Efficiency
+
+Pass rate says whether the goal was reached. Efficiency says how much of the work was wasted getting
+there: the share of actions that actually moved the run forward. A run can pass and still be mostly
+flailing, and that shows up here before it shows up in the pass rate.
+
+After every run, jev is handed the whole trace and asked, one `Noul` per action, whether that action
+contributed — judged **with hindsight against the full sequence**, because contribution is only
+visible in context. Opening a filter panel contributes if the filter is then used and does not if the
+run opens it four times. One call per run, about $0.00006, on unless `EVAL_EFFICIENCY=0`.
+
+**The threshold matters.** Jev rates a plainly failed action near 0.1 and a plainly useful one near
+0.9, but a merely aimless one — paging repeatedly, wandering onto a lender's offer page — lands
+around 0.65. A 0.5 cut counts that as contribution, so the bar is `EVAL_CONTRIBUTED_AT=0.75`. With
+it, a clean five-action trace scores 100% and a ten-action trace with paging, a detour and two failed
+selects scores 30-50%.
+
+**Known bias: on the refinance eval, jev is grading its own work.** For the other drivers it is an
+independent judge; for jev it is not, and the number should be read with that in mind. A second
+judge model would settle it and has not been tried.
+
+**Stability.** A clean trace scores 100% every time. A thrashing one varies between 30% and 50%
+across repeats, because several of its actions sit near the threshold. Treat single-run efficiency as
+indicative and the batch mean as the measurement.
+
+Measured at n=8: mean **70%**, and the only run that failed had both the lowest efficiency (47%) and
+the most steps (18). **Target: ≥ 70%**, with the same n=25 as the pass rate.
+
 ## Current targets
 
 Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current harness (n=18):
@@ -110,6 +138,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
+| efficiency | 70% (n=8) | **≥ 70%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.
