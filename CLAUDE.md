@@ -17,6 +17,8 @@ were written after a bug caused by breaking them:
   evidence behind them. Check here before reversing one.
 - **[specs/known-failure-modes.md](specs/known-failure-modes.md)** — what goes wrong and which fixture
   covers it.
+- **[specs/debugging.md](specs/debugging.md)** — the step trace, the efficiency labels and the
+  browser's own recording, and when to reach for each. Start here when a run did something odd.
 - **[specs/targets.md](specs/targets.md)** — the pass rate, cost and latency targets, and the
   sample sizes needed to claim anything about them. A 4-run batch is a smoke test, not a result.
 - **[specs/bu-bench-handoff.md](specs/bu-bench-handoff.md)** — running Peregrine against
@@ -33,8 +35,8 @@ EVAL=evals/online/test_refinance_e2e.py EVAL_DRIVERS=jev EVAL_RUNS=3 make e2e
 ```
 
 `make e2e` sources `.env` itself; do not run `uv run pytest` directly for online evals. If `uv` is not
-on PATH it lives at `~/.local/bin/uv`. Every run launches its own throwaway Chrome. Set
-`EVAL_TRACE_SHOTS=1` for per-step screenshots in `.traces/` when debugging.
+on PATH it lives at `~/.local/bin/uv`. Every run launches its own throwaway Chrome. Every run writes a trace to
+`.traces/`; see [specs/debugging.md](specs/debugging.md) for what is in it and how to get more.
 
 ## Working on this repo
 
