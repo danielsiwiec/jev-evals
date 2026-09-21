@@ -6,6 +6,22 @@ Each eval drives a real Chrome over CDP toward a goal. Every step, the model see
 
 Scoring is external. A run counts as a success only if the world changed — a file on disk, or an answer matching Bankrate's own API. A model saying it succeeded proves nothing.
 
+## Specs
+
+[specs/](specs/) holds the principles this project is built on, kept separate from the code because
+they outlast it. They are not documentation of what the code happens to do — they are what it is held
+to, and most were written after a bug caused by breaking them.
+
+| spec | guards |
+|---|---|
+| [harness-philosophy.md](specs/harness-philosophy.md) | that decisions belong to the model and not the harness: jev decides, jev sees the real unfiltered state, the action space stays what a person could do, goals state intent only, every run is inspectable, and any logic the harness owns is listed as an exception |
+| [eval-approach.md](specs/eval-approach.md) | that failures are reproduced before they are fixed, offline where possible, and that fixtures replicate a real page faithfully rather than the part we assume is the cause |
+| [decisions.md](specs/decisions.md) | choices that are easy to reverse by accident, with the evidence that produced them |
+| [known-failure-modes.md](specs/known-failure-modes.md) | the failures seen so far and the fixture covering each |
+
+A change that contradicts a spec is a change to the spec: update it in the same commit and say what
+the new evidence is. When a spec and the code disagree, the spec is the intent and the code is the bug.
+
 ## The drivers
 
 | driver | model | how it decides | cost |
@@ -82,6 +98,14 @@ Two failure modes worth recognising in the trace:
 - **Premature done.** A model reports the goal is met on arrival. `goal_met` is only trusted from deciders that report calibrated probabilities (`Decider.calibrated`); for the rest, only an explicit `done` action ends a run. External scoring catches this regardless.
 
 ## Layout
+
+```
+specs/            the principles above
+evals/offline/    HTML fixtures and the unit evals that pin harness behaviour
+evals/online/     unit evals against real pages, plus the two e2e journeys
+jev_evals/        the harness: observation, decision loop, browser control, tracing
+```
+
 
 ```
 jev_evals/     the loop, page driver and deciders (extracted from synthia)
