@@ -131,3 +131,43 @@ async def test_ad_overlay_is_reported_while_it_plays():
         outcome = await tab.click((await _find(tab, "Download PDF")).ref)
         assert "blocked" in outcome, outcome
         assert await tab.evaluate("() => document.title") == "AD_PLAYING"
+
+
+async def test_file_host_gate_hides_the_primary_action_until_it_is_cleared():
+    async with _tab("file_host_gate.html") as tab:
+        names = [e.name for e in (await tab.observe()).elements]
+        assert "Save file" not in names, (
+            f"the toolbar is not laid out while the gate is up, so its action is not a target: {names}"
+        )
+        assert "CONFIRM" in names
+
+
+async def test_file_host_gate_takes_two_steps_to_clear():
+    async with _tab("file_host_gate.html") as tab:
+        await tab.click((await _find(tab, "CONFIRM")).ref)
+        assert await tab.evaluate("() => document.title") == "CONFIRMATION_OPEN"
+        modal = [e.name for e in (await tab.observe()).elements if e.modal]
+        assert modal == ["Close confirmation"], f"the only way out of the confirmation must be observable, saw {modal}"
+        await tab.click((await _find(tab, "Close confirmation")).ref)
+        assert await tab.evaluate("() => document.title") == "GATE_CLEARED"
+
+
+async def test_file_host_that_never_becomes_ready_offers_nothing_to_click():
+    async with _tab("file_host_gate.html") as tab:
+        await tab.click((await _find(tab, "CONFIRM")).ref)
+        await tab.click((await _find(tab, "Close confirmation")).ref)
+        await tab.sleep(3)
+        assert await _find(tab, "Save file") is None, "the file never becomes ready, so the primary action stays absent"
+        assert "Preparing" in (await tab.observe()).full_text
+
+
+async def test_file_host_becomes_actionable_once_it_is_ready():
+    async with _tab("file_host_gate.html", "?prepare=2") as tab:
+        await tab.click((await _find(tab, "CONFIRM")).ref)
+        await tab.click((await _find(tab, "Close confirmation")).ref)
+        assert await _find(tab, "Save file") is None
+        await tab.sleep(3)
+        save = await _find(tab, "Save file")
+        assert save is not None, "once ready, the primary action must appear"
+        await tab.click(save.ref)
+        assert await tab.evaluate("() => document.title") == "SAVE_STARTED"

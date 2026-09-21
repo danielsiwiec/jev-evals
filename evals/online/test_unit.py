@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from evals.local_browser import chrome_available, find, open_tab, wait_for_element
@@ -126,3 +128,39 @@ async def test_limewire_consent_gate_offers_its_own_controls():
         assert "confirm" in names, _invalid(
             f"the consent gate no longer offers a CONFIRM control (modal buttons: {sorted(names)})"
         )
+
+
+async def test_limewire_download_starts_once_the_consent_gate_is_cleared():
+    """The failing step from the download e2e, isolated.
+
+    Reproduces 3/3: jev clears the two-step gate correctly, presses Download, the harness
+    reports a clean click, and no download event ever arrives. Captured online because the
+    offline fixtures of this gate (consent_gate, two_step_consent_gate, consent_gate_crowded)
+    are all cleared by jev without trouble, so whatever defeats it lives on the real page.
+    """
+    async with open_tab(LIMEWIRE) as tab:
+        assert await wait_for_element(tab, "Download") is not None
+        for _ in range(20):
+            if await _gate_on(tab):
+                break
+            await asyncio.sleep(0.5)
+        if not await _gate_on(tab):
+            pytest.fail(_invalid("the consent gate did not appear, so this step cannot be exercised"))
+
+        confirm = await wait_for_element(tab, "CONFIRM", timeout_s=10)
+        assert confirm is not None, _invalid("the gate no longer offers CONFIRM")
+        await tab.click(confirm.ref)
+        success = await wait_for_element(tab, "Close success modal", timeout_s=10)
+        assert success is not None, _invalid("CONFIRM no longer opens a success modal; the two-step shape has changed")
+        await tab.click(success.ref)
+
+        download = await wait_for_element(tab, "Download")
+        outcome = await tab.click(download.ref)
+        assert "blocked" not in outcome, f"the gate should be cleared by now: {outcome}"
+
+        for _ in range(12):
+            if tab.take_download():
+                return
+            await asyncio.sleep(1)
+            await tab.settle()
+        pytest.fail(f"consent cleared and Download reported {outcome!r}, but no download event arrived")

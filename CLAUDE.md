@@ -40,27 +40,72 @@ auto-loads `.env`, so every driver fails to authenticate.
 
 If `uv` is not on PATH it lives at `~/.local/bin/uv`; the Makefile already resolves this.
 
+## When an e2e run fails, capture it before fixing it
+
+An e2e failure is a lead, not a diagnosis. Do not change the harness or the prompt off the back of a
+journey trace. Reduce it to the smallest thing that reproduces, in this order:
+
+1. **Offline unit eval first.** Reproduce the failing step as a fixture in
+   [evals/offline/pages/](evals/offline/pages/). This is the goal every time: fast, deterministic,
+   no network, and it will still reproduce a year from now.
+2. **Online unit eval if it cannot be made offline.** Some behaviour only exists on the live site —
+   a gate that re-renders itself, server-driven timing, bot detection. Capture it as a single
+   problematic *step* in [evals/online/test_unit.py](evals/online/test_unit.py), never as a journey,
+   and pair it with a validity guard so the day the site changes is the day the test says so.
+3. **Only then change anything.** The new test must fail before the fix and pass after. If it passes
+   both ways it is not testing the bug.
+
+Say plainly which of the two you managed, because it matters: an offline reproduction is a fact you
+own, an online one is a fact you are renting from someone else's website.
+
 ## Replicating a real page as an offline fixture
 
-When a real site breaks a run, reproduce it offline before fixing anything. Inspect first, guess never:
+A fixture is only worth having if it behaves like the page it stands for. Replicate the whole observed
+behaviour, not the one part you think is the cause — the first attempt at the LimeWire fixture modelled
+the consent gate and left out the modal overlay and the stuck decrypting state, so jev passed it while
+failing the real page, and it proved nothing.
 
-1. **Catch it live.** These gates are per-profile and often one-shot, so use a brand-new profile
-   (`fresh_chrome`) and, if it still will not appear, the exact navigation path the eval takes rather
-   than a direct URL.
-2. **Inspect the real thing.** Record from the DOM: the blocking element's id and class, its `position`,
-   `z-index` and `getBoundingClientRect()`, every button inside it with its exact text, and whether it
-   sits in an iframe or shadow root. Check `curl` too: content present in the HTML but absent from the
-   DOM means client-side rendering, and vice versa. Compare headed against headless only after fixing
-   the window size in both, or layout differences read as rendering differences.
-3. **Find the logical gate, not just the visual one.** The question that matters is whether the page
-   refuses to act while the gate is unresolved. A fixture that only covers the target will pass against
-   a broken harness — the first consent fixture written here did exactly that and proved nothing.
-4. **Write the fixture** in [evals/offline/pages/](evals/offline/pages/) reproducing those recorded
-   characteristics, and drive state through `document.title` so a test can assert what actually happened.
-   Pair it with a validity guard in [evals/online/test_unit.py](evals/online/test_unit.py) asserting the
-   real page still has the property you just modelled, so the fixture cannot quietly drift out of date.
-5. **Prove it discriminates.** The new test must fail against the old harness and pass against the new
-   one. If it passes both, it is not testing what you think.
+**Observe before writing anything.** Drive the real page the way the agent does and watch what happens:
+
+1. **Get the page into the failing state.** These gates are per-profile and often one-shot, so use a
+   brand-new profile (`fresh_chrome`, which is what every eval run uses) and take the exact navigation
+   path the eval takes rather than a direct URL. If it does not appear, start another fresh profile and
+   retry — several times if needed. State that changes between runs is itself a finding worth recording.
+2. **Interact with it, do not just read the DOM.** Click each control and record what each one does:
+   which dismiss the overlay, which advance it to another one, which release the page, which do nothing.
+   LimeWire's CONFIRM opens a second success modal rather than clearing the gate, which a static dump
+   never shows.
+3. **Watch it, with patience, and after interacting.** A page's behaviour includes how it changes over
+   time, and the interesting part often only starts once the gate is cleared. Clear it, then poll for
+   minutes, not seconds, recording at each tick what the agent would see: body text, and the target's
+   own `getBoundingClientRect()`. Three findings that only a patient watch produces, all from one page:
+   the preparing state never resolved across three minutes; the primary action stayed 0x0 the whole
+   time, so it was never a click target at all; and neither fact is visible in a single snapshot.
+   Whatever you find — resolves after N seconds, never resolves, resolves only after another action —
+   is a temporal property, and the fixture reproduces it with the same timing, not as a static page.
+4. **Take screenshots** (`tab.screenshot`) whenever the DOM and the rendered page might disagree, and
+   when something needs to be shown to a person. A fixture that looks nothing like the real page will
+   be spotted by eye long before a test catches it.
+5. **Record the shape**: the blocking element's id and class, its `position`, `z-index`,
+   `getBoundingClientRect()`, whether it is an overlay covering the target or an inert page underneath,
+   every button inside it with its exact accessible name, and whether it lives in an iframe or shadow
+   root. Compare `curl` against the DOM: content in one and not the other means client-side rendering.
+   Compare headed against headless only after fixing the window size in both.
+6. **Reproduce the shape, not the wording.** Same overlay geometry, stacking and z-index, same number
+   of steps to clear, same divergence between visible text and accessible name, same layout collapse
+   while the gate is up, same timing for anything asynchronous. But write the copy generically: a
+   fixture that repeats a real site's vocabulary — its brand, its file name, its exact button text —
+   risks testing whether a model recognises that page rather than whether it can reason about the
+   structure. Use neutral stand-ins ("Filebox", "quarterly-report.pdf", "Save file", "Preparing").
+   Drive state through `document.title` so a test can assert what actually happened.
+7. **Check it side by side.** Open the fixture and the real page and compare them by eye before
+   trusting the fixture.
+8. **Prove it discriminates.** The new test must fail against the old harness and pass against the new
+   one, and a model that fails the real page should fail the fixture. If it passes both, the fixture is
+   missing whatever actually causes the failure — go back to step 1.
+
+Pair each fixture with a validity guard in [evals/online/test_unit.py](evals/online/test_unit.py)
+asserting the real page still has the property being modelled, so the fixture cannot drift out of date.
 
 ## Interpreting results
 

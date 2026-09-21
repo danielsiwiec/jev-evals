@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>File host behind a two-step privacy gate</title>
+<!--
+  Generic reproduction of a file-sharing host guarded by a consent manager. Vocabulary is
+  deliberately not copied from any real site; what is reproduced is the *shape* observed there:
+
+    - a toolbar carrying the primary action, over a body that shows an async preparing state
+    - the gate is a fixed, full-viewport overlay at z-index 2147483647 on a translucent dark
+      background, nested inside a static zero-height container
+    - its primary control does not clear the gate, it swaps in a second confirmation overlay
+      whose only control is an icon-style button whose visible text and accessible name differ
+    - the toolbar is not laid out until the gate is gone, so the primary action measures 0x0
+      and is not a click target while the overlay is up
+    - the preparing state does not resolve: watched for over three minutes after the gate was
+      cleared, the body still read "preparing" and the primary action still measured 0x0, so it
+      was never a click target at all — the page is permanently unable to serve the file
+
+  ?prepare=N finishes preparing after N seconds. ?gate=0 starts with no gate at all.
+-->
+<style>
+  html,body{height:100%;margin:0;font:16px/1.4 system-ui;background:#f8fafc}
+  #toolbar{display:flex;align-items:center;gap:12px;padding:14px 20px;background:#fff;
+           border-bottom:1px solid #e2e8f0}
+  #save{background:#047857;color:#fff;border:0;border-radius:20px;padding:10px 20px;font-weight:600}
+  #stage{display:flex;flex-direction:column;align-items:center;justify-content:center;height:70%}
+  #status{font-weight:700;margin-top:12px}
+  .hidden{display:none!important}
+  #privacy-root{position:static;width:100%;height:0}
+  .privacy-overlay{position:fixed;inset:0;z-index:2147483647;background:rgba(33,41,52,.75);
+                   display:flex;align-items:center;justify-content:center}
+  .card{background:#fff;padding:28px;width:760px;max-width:90vw;position:relative}
+  .card.small{width:400px;text-align:center}
+  .primary{background:#1a73e8;color:#fff;border:0;padding:12px 28px;font-weight:600;letter-spacing:.08em}
+  .xclose{position:absolute;top:18px;right:22px;background:none;border:0;font-size:28px}
+</style>
+<body>
+<div id="toolbar">
+  <a href="#" id="brand">Filebox</a>
+  <span id="name">quarterly-report.pdf</span>
+  <span>12.4MB</span><span>Shared by a colleague</span>
+  <button id="save">Save file</button>
+  <button id="copy">Copy link</button>
+  <button id="flag">Report this file</button>
+  <button id="notes">Show notes</button>
+</div>
+
+<div id="stage"><div id="status">Preparing</div><div id="dots">• • •</div></div>
+
+<div id="privacy-root">
+  <div class="privacy-main">
+    <div class="privacy-overlay" id="step1" role="dialog" aria-modal="true">
+      <div class="card">
+        <button class="xclose" id="close1" aria-label="Close">&times;</button>
+        <h2>Manage how your information is used</h2>
+        <p>Choose whether your information may be shared with our partners for personalised
+           advertising. Use the section below to record your choice. You can change it later from
+           the footer of any page on this site.</p>
+        <button id="details">Information sharing choices</button>
+        <button class="primary" id="confirm">CONFIRM</button>
+      </div>
+    </div>
+    <div class="privacy-overlay hidden" id="step2" role="dialog" aria-modal="true">
+      <div class="card small">
+        <p>Your choices have been recorded.</p>
+        <button class="primary" id="ok" aria-label="Close confirmation">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  const $ = id => document.getElementById(id);
+  window.gateCleared = false;
+  window.ready = false;
+
+  // The toolbar is not laid out until the gate is gone, so the primary action
+  // measures 0x0 and cannot be clicked while the overlay is up.
+  const showToolbar = on => $('toolbar').style.display = on ? 'flex' : 'none';
+  showToolbar(false);
+
+  if (q.get('gate') === '0') {
+    $('privacy-root').remove();
+    window.gateCleared = true;
+    document.title = 'GATE_SKIPPED';
+  }
+
+  $('confirm').onclick = () => {
+    $('step1').classList.add('hidden');
+    $('step2').classList.remove('hidden');
+    document.title = 'CONFIRMATION_OPEN';
+  };
+  $('ok').onclick = () => {
+    $('step2').classList.add('hidden');
+    window.gateCleared = true;
+    // The toolbar only lays out once the file is ready; on the real page that never happened,
+    // so clearing the gate reveals a page that still cannot be acted on.
+    if (window.ready) showToolbar(true);
+    document.title = 'GATE_CLEARED';
+  };
+  $('close1').onclick = () => {
+    $('step1').classList.add('hidden');
+    window.gateCleared = true;
+    if (window.ready) showToolbar(true);
+    document.title = 'GATE_DISMISSED';
+  };
+
+  $('save').onclick = () => {
+    document.title = window.ready ? 'SAVE_STARTED' : 'NOT_READY';
+  };
+
+  const prepare = q.get('prepare');
+  if (prepare !== null) {
+    setTimeout(() => {
+      window.ready = true;
+      $('status').textContent = 'Ready';
+      $('dots').remove();
+      if (window.gateCleared) showToolbar(true);
+      document.title = 'READY';
+    }, Number(prepare) * 1000);
+  }
+</script>
