@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A table whose rows all carry the same button</title>
+<!--
+  A results table where every row has an identically named button, as a rate table does. The name
+  alone cannot say which row is meant; the row's own text is what a person reads to tell them apart.
+-->
+<body style="margin:0;font:16px system-ui;padding:24px">
+<h1>Offers</h1>
+<table border="1" cellpadding="8">
+  <tr><th>Lender</th><th>Rate</th><th></th></tr>
+  <tr><td>Harbour Mutual</td><td>6.624%</td>
+      <td><button onclick="document.title='PICKED_HARBOUR'">See offers</button></td></tr>
+  <tr><td>Northgate Lending</td><td>6.710%</td>
+      <td><button onclick="document.title='PICKED_NORTHGATE'">See offers</button></td></tr>
+  <tr><td>Crestline Bank</td><td>6.880%</td>
+      <td><button onclick="document.title='PICKED_CRESTLINE'">See offers</button></td></tr>
+</table>

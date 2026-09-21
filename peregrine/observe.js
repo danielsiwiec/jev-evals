@@ -60,6 +60,18 @@
     }
     return role || el.tagName.toLowerCase();
   };
+  // Where a name repeats, the name alone cannot say which one is meant: a rate table shows seven
+  // identical "How APR and points work" buttons, one per lender. The row each sits in is what a
+  // person reads to tell them apart, so it is carried for ambiguous names only.
+  const rowOf = (el) => {
+    const row = el.closest("tr,li,article,[role=row],[role=listitem]");
+    if (!row || row === el) return "";
+    const text = clean(row.innerText || "");
+    if (!text) return "";
+    const own = clean(el.innerText || el.getAttribute("aria-label") || "");
+    const rest = own ? text.replace(own, " ").trim() : text;
+    return rest.slice(0, 60);
+  };
   const extraOf = (el, kind) => {
     const bits = [];
     if (kind === "link") {
@@ -98,7 +110,7 @@
     ref += 1;
     (stand || el).setAttribute("data-synthia-ref", String(ref));
     elements.push({
-      ref, kind, name: name.slice(0, 120), extra: extraOf(el, kind),
+      ref, kind, name: name.slice(0, 120), extra: extraOf(el, kind), node: el,
       inViewport: r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw,
       modal: !!el.closest(MODAL),
     });
@@ -134,6 +146,16 @@
   };
   try { walk(main, 0); } catch (e) { if (!String(e.message).includes("__stop__")) throw e; }
   const text = lines.join(" ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{2,}/g, "\n").trim().slice(0, 40000);
+  // Only ambiguous names need the extra words, so the cost falls where it buys something.
+  const seen_names = {};
+  for (const e of elements) if (e.name) seen_names[e.name] = (seen_names[e.name] || 0) + 1;
+  for (const e of elements) {
+    if (e.name && seen_names[e.name] > 1 && e.node) {
+      const row = rowOf(e.node);
+      if (row) e.extra = (e.extra ? e.extra + " " : "") + `in: ${row}`;
+    }
+    delete e.node;
+  }
   return {
     url: location.href, title: document.title, text, alerts, elements,
     scroll: { y: Math.round(window.scrollY), height: Math.round(document.documentElement.scrollHeight), viewport: vh },

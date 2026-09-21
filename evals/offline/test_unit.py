@@ -266,3 +266,27 @@ async def test_span_filling_still_works_without_any_text_model():
         outcome = await _perform(tab, decision, await tab.observe(), {})
         assert "typed" in outcome, outcome
         assert await tab.evaluate("() => document.getElementById('q').value") == "high tide"
+
+
+async def test_repeated_names_carry_the_row_that_tells_them_apart():
+    """Three buttons named 'See offers' are three different buttons.
+
+    Without the row each belongs to, the name alone cannot say which lender is meant, and a model
+    choosing between them is guessing.
+    """
+    async with _tab("repeated_names.html") as tab:
+        buttons = [e for e in (await tab.observe()).elements if e.name == "See offers"]
+        assert len(buttons) == 3, [e.line() for e in buttons]
+        assert all("in:" in e.extra for e in buttons), [e.line() for e in buttons]
+        lenders = {"Harbour", "Northgate", "Crestline"}
+        named = {lender for lender in lenders if any(lender in e.extra for e in buttons)}
+        assert named == lenders, f"each row should name its lender, got {[e.extra for e in buttons]}"
+
+
+async def test_a_unique_name_is_left_alone():
+    """The row is only worth carrying where the name is ambiguous."""
+    async with _tab("repeated_names.html") as tab:
+        heading = [e for e in (await tab.observe()).elements if e.name == "See offers"]
+        others = [e for e in (await tab.observe()).elements if e.name != "See offers"]
+        assert heading, "fixture should have the repeated buttons"
+        assert all("in:" not in (e.extra or "") for e in others), [e.line() for e in others]
