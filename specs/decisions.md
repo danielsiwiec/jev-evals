@@ -12,7 +12,7 @@ name. Measured against the refinance objective it was close to noise: `Open more
 zero-point radio `0` both scored zero ("filters" does not match "filter", and "0" is too short to
 tokenise), while `Reject All` scored only through the stopword "all". It also rewarded objectives that
 named a site's controls, which is the opposite of what a goal should do. Ten runs after removing it:
-eight found the answer. See `ranked_elements` in [jev_evals/actions.py](../jev_evals/actions.py).
+eight found the answer. See `ranked_elements` in [peregrine/actions.py](../peregrine/actions.py).
 
 ## Pagination instead of truncation
 

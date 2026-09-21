@@ -10,7 +10,7 @@ from loguru import logger
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 from playwright.async_api import Error as PlaywrightError
 
-from jev_evals.actions import Observation
+from peregrine.actions import Observation
 
 DEFAULT_CDP_HTTP = "http://192.168.65.254:9222"
 _OBSERVE_JS = (Path(__file__).parent / "observe.js").read_text()

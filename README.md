@@ -1,10 +1,34 @@
-# jev-evals
+# Peregrine
 
-Browser-agent evals that compare three models on the **same** decision loop: [Jev](https://typesafe.sh), Gemini Flash Lite, and Luna.
+A browser agent for fast, structured decision models — the kind that return typed answers with
+probabilities rather than text. Peregrine gives such a model eyes and hands: it turns a live page into
+structured state, carries out one chosen action, and reports honestly what happened. It decides
+nothing itself.
 
-Each eval drives a real Chrome over CDP toward a goal. Every step, the model sees the current page (URL, text, interactive elements, recent actions) and answers one question: what is the single next action — click, type, select, scroll, back, wait, done, blocked? The loop performs it and observes again. Only the model changes between drivers, so differences in the results are differences between models, not between harnesses.
+The name is the bird and the word: *peregrinus*, the traveller, and the fastest animal alive. Both
+halves are the point — moving through the web, quickly.
 
-Scoring is external. A run counts as a success only if the world changed — a file on disk, or an answer matching Bankrate's own API. A model saying it succeeded proves nothing.
+```
+goal ──▶ observe the page ──▶ model picks one action ──▶ perform it ──▶ report the outcome ──┐
+             ▲                                                                                │
+             └────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Every step, the model sees the current page — url, title, text, interactive elements, open tabs,
+recent actions — and answers what the single next action should be: click, type, submit, select,
+press, scroll, back, refresh, close a tab, show more, wait, done, blocked. Peregrine performs it and
+observes again.
+
+The harness is deliberately dumb. What it may and may not decide is written down in
+[specs/harness-philosophy.md](specs/harness-philosophy.md), and most of those rules exist because
+breaking one produced a bug that looked like a model failure and was not.
+
+It ships with evals that compare models on the same loop — currently [Jev](https://typesafe.sh),
+Gemini Flash Lite and Luna. Only the model changes between drivers, so differences in the results are
+differences between models rather than between harnesses.
+
+Scoring is external. A run counts as a success only if the world changed — a file on disk, or an
+answer matching Bankrate's own API. A model saying it succeeded proves nothing.
 
 ## Specs
 
@@ -30,7 +54,7 @@ the new evidence is. When a spec and the code disagree, the spec is the intent a
 | `gemini` | `gemini/gemini-3.1-flash-lite` | generates a JSON decision against a strict schema | $0.25/M in, $1.50/M out |
 | `luna` | `gpt-5.6-luna` | generates a JSON decision against a strict schema | $0.20/M in, $1.20/M out |
 
-All three implement the same `Decider` protocol in [`jev_evals/decider.py`](jev_evals/decider.py) and run through the same [`run_goal`](jev_evals/loop.py) loop.
+All three implement the same `Decider` protocol in [`peregrine/decider.py`](peregrine/decider.py) and run through the same [`run_goal`](peregrine/loop.py) loop.
 
 ## The evals
 
@@ -103,12 +127,12 @@ Two failure modes worth recognising in the trace:
 specs/            the principles above
 evals/offline/    HTML fixtures and the unit evals that pin harness behaviour
 evals/online/     unit evals against real pages, plus the two e2e journeys
-jev_evals/        the harness: observation, decision loop, browser control, tracing
+peregrine/        the harness: observation, decision loop, browser control, tracing
 ```
 
 
 ```
-jev_evals/     the loop, page driver and deciders (extracted from synthia)
+peregrine/     the loop, page driver and deciders (extracted from synthia)
   loop.py        run_goal: observe, decide, act, repeat
   decider.py     JevDecider, LlmDecider and the Decider protocol
   actions.py     the action set, observations, question building

@@ -7,7 +7,7 @@ import httpx
 import litellm
 from loguru import logger
 
-from jev_evals.actions import (
+from peregrine.actions import (
     ACTIONS,
     TARGET_ACTIONS,
     TARGET_QUESTION,
@@ -17,8 +17,8 @@ from jev_evals.actions import (
     build_questions,
     parse_decision,
 )
-from jev_evals.jev import JevClient, JevUsage
-from jev_evals.telemetry import start_span
+from peregrine.jev import JevClient, JevUsage
+from peregrine.telemetry import start_span
 
 _LLM_TIMEOUT_S = 30
 _MAX_OUTPUT_TOKENS = 300

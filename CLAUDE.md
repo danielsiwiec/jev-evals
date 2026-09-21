@@ -1,4 +1,4 @@
-# jev-evals
+# Peregrine
 
 Browser-agent evals comparing three models — `jev`, `gemini`, `luna` — on the same decision loop. See [README.md](README.md) for what they measure and how the pieces fit together.
 
@@ -10,7 +10,7 @@ were written after a bug caused by breaking them:
 - **[specs/harness-philosophy.md](specs/harness-philosophy.md)** — the six rules the harness follows:
   decisions belong to jev, jev gets the real unfiltered state, the action space is what a person can
   do, goals state intent only, every run is inspectable, and the harness stays dumb with every
-  exception listed. Read this before changing anything under `jev_evals/`.
+  exception listed. Read this before changing anything under `peregrine/`.
 - **[specs/eval-approach.md](specs/eval-approach.md)** — the offline/online and unit/e2e suites, where
   to iterate, how to capture a failure before fixing it, and how to replicate a real page faithfully.
 - **[specs/decisions.md](specs/decisions.md)** — choices that are easy to undo by accident, with the
@@ -35,6 +35,6 @@ on PATH it lives at `~/.local/bin/uv`. Every run launches its own throwaway Chro
 
 Run `make check` after changes. Follow the existing style: no comments or docstrings, `_` prefix for module-internal names.
 
-Adding a model that generates JSON decisions is one line in `DRIVERS` in [evals/drivers.py](evals/drivers.py) — anything LiteLLM can reach. A different interface needs a class satisfying the `Decider` protocol in [jev_evals/decider.py](jev_evals/decider.py).
+Adding a model that generates JSON decisions is one line in `DRIVERS` in [evals/drivers.py](evals/drivers.py) — anything LiteLLM can reach. A different interface needs a class satisfying the `Decider` protocol in [peregrine/decider.py](peregrine/decider.py).
 
 Secrets live in `.env`, which is gitignored. Never commit it or echo key values.

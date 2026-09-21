@@ -1,5 +1,5 @@
 [project]
-name = "jev-evals"
+name = "peregrine"
 version = "0.1.0"
 description = "Browser-agent evals comparing Jev, Gemini Flash Lite and Luna on the same decision loop"
 requires-python = ">=3.13"
@@ -38,7 +38,7 @@ indent-style = "space"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["jev_evals", "evals"]
+packages = ["peregrine", "evals"]
 
 [build-system]
 requires = ["hatchling"]

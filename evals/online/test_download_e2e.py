@@ -7,7 +7,7 @@ import pytest
 
 from evals.drivers import DRIVERS, selected
 from evals.report import render
-from jev_evals.jev import jev_available
+from peregrine.jev import jev_available
 
 DOWNLOADS = Path(os.getenv("DOWNLOADS_DIR", Path.home() / "Downloads"))
 START_URL = "https://freemagazines.top/?s=The+Economist+USA"

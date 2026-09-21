@@ -6,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 from typesafe_sdk import Noul
 
-from jev_evals.actions import (
+from peregrine.actions import (
     TARGET_ACTIONS,
     VALUE_ACTIONS,
     Decision,
@@ -14,11 +14,11 @@ from jev_evals.actions import (
     build_state,
     visible_elements,
 )
-from jev_evals.decider import Decider, JevDecider
-from jev_evals.jev import JevClient, JevUsage
-from jev_evals.page import Tab
-from jev_evals.telemetry import start_span
-from jev_evals.trace import Trace
+from peregrine.decider import Decider, JevDecider
+from peregrine.jev import JevClient, JevUsage
+from peregrine.page import Tab
+from peregrine.telemetry import start_span
+from peregrine.trace import Trace
 
 MAX_STEPS = int(os.getenv("BROWSER_MAX_STEPS", "20"))
 TIMEOUT_S = float(os.getenv("BROWSER_TIMEOUT_S", "120"))

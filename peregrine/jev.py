@@ -7,8 +7,8 @@ from typing import Any
 from loguru import logger
 from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, RetryPolicy, Score
 
-from jev_evals.models import JEV_MODEL_SPEC
-from jev_evals.telemetry import record_call_cost, start_span
+from peregrine.models import JEV_MODEL_SPEC
+from peregrine.telemetry import record_call_cost, start_span
 
 JEV_MODEL = os.getenv("JEV_MODEL", JEV_MODEL_SPEC.name)
 JEV_INPUT_COST_PER_M = JEV_MODEL_SPEC.input_cost_per_m

@@ -17,3 +17,11 @@ Each of these has an offline fixture. Reproduce there before changing the harnes
 - **Premature done.** A model claims the goal is met on arrival. External scoring catches this.
 - **Download path mismatch.** The download eval watches `DOWNLOADS_DIR`; Chrome writes to its profile's
   own directory. On a fresh profile these differ and every run scores "no file".
+- **Wandering past the answer.** The goal is met and the agent keeps going — clicking a lender's own
+  offer link, which opens a new tab, and then working that tab's lead form. A tab opened by a link
+  has no history, so `back` cannot leave it; `close_tab` returns to the tab it was opened from.
+  Fixtures: `rates_table.html`, `lead_form.html`, `new_tab_detour.html`.
+- **Premature done.** The agent clicks once, the click lands cleanly on a page that is not ready, and
+  it reports the goal met. A clean click is not a completed action, and only external scoring catches
+  the difference. Fixture: `file_host_gate.html`, covered by a deliberately failing decision eval.
+

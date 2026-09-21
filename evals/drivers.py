@@ -9,11 +9,11 @@ from typing import Any
 
 import httpx
 
-from jev_evals.decider import Decider, LlmDecider
-from jev_evals.jev import JevClient
-from jev_evals.loop import run_goal
-from jev_evals.models import GEMINI_MODEL, JEV_MODEL_SPEC, LUNA_MODEL
-from jev_evals.page import HostBrowser, Tab
+from peregrine.decider import Decider, LlmDecider
+from peregrine.jev import JevClient
+from peregrine.loop import run_goal
+from peregrine.models import GEMINI_MODEL, JEV_MODEL_SPEC, LUNA_MODEL
+from peregrine.page import HostBrowser, Tab
 
 CDP = os.getenv("BROWSER_CDP_HTTP", "http://localhost:9222")
 MAX_STEPS = int(os.getenv("EVAL_MAX_STEPS", "40"))

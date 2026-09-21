@@ -5,7 +5,7 @@ import pytest
 from evals.bankrate_api import Offer, best_zero_point, fetch_offers, lender_in, rate_in
 from evals.drivers import DRIVERS, gather, selected
 from evals.report import render
-from jev_evals.jev import jev_available
+from peregrine.jev import jev_available
 
 LOAN, PROPERTY, FICO, ZIP = 600000, 950000, 800, "96150"
 START_URL = "https://www.bankrate.com/mortgages/refinance-rates/"

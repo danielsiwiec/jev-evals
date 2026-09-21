@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from jev_evals.page import HostBrowser, Tab
+from peregrine.page import HostBrowser, Tab
 
 CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 HEADLESS = os.getenv("EVAL_HEADLESS", "1").lower() in ("1", "true", "yes")

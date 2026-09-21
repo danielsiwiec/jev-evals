@@ -2,9 +2,9 @@ import pytest
 
 from evals.local_browser import chrome_available, fresh_chrome
 from evals.offline.test_unit import PAGES
-from jev_evals.jev import JevClient, jev_available
-from jev_evals.loop import run_goal
-from jev_evals.page import HostBrowser, Tab
+from peregrine.jev import JevClient, jev_available
+from peregrine.loop import run_goal
+from peregrine.page import HostBrowser, Tab
 
 pytestmark = [
     pytest.mark.eval,

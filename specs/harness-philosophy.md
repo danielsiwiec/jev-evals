@@ -39,9 +39,13 @@ would decide which date, which option, or whether the step is needed at all, it 
 Build them when a goal needs them, and keep the primitives available alongside.
 
 The current set is `click`, `type`, `submit`, `select`, `press`, `scroll_up`, `scroll_down`, `back`,
-`refresh`, `wait`, plus `done` and `blocked` as terminal reports rather than page actions.
+`refresh`, `close_tab`, `wait`, and `show_more`, plus `done` and `blocked` as terminal reports rather
+than page actions. `show_more` is the odd one: it acts on the observation rather than the page,
+revealing what pagination is holding back. It is listed here because it is still jev asking for
+something rather than the harness deciding what to hand over.
 
-Remaining gap: `drag` does not exist yet. `select` is also not strictly user-like — a person opens a
+Remaining gap: `drag` does not exist yet, and there is no way to switch to a specific open tab —
+`close_tab` only returns to the tab the current one was opened from. `select` is also not strictly user-like — a person opens a
 dropdown and clicks an option, two clicks, where `select` sets the value through the DOM in one step.
 It stays because native `<select>` menus render outside the page and cannot be observed, but it is the
 one action in the set a user could not perform as written.
@@ -72,13 +76,17 @@ resolving where a click lands, waiting for a load, capturing an outcome. Judgeme
 that is not purely mechanical is an exception, and an exception must be written down here with its
 reason. The current list is short by design:
 
-- **Observation budget** (`prune` to `BROWSER_MAX_CANDIDATES=80`, `_TEXT_EXCERPT=1800`,
-  `_HISTORY_WINDOW=10`, a 400-element cap in `observe.js`, names clipped to 80–120 characters). jev
-  sees a slice of a large page, ranked by goal-word overlap, dialog membership and viewport. This is
-  the biggest live violation of rule 2 and it is a budget, not a judgement: a needed control on a very
-  large page can fall outside it. **Being replaced by pagination**, so jev is told more exists and can
-  ask for it, instead of the harness choosing what matters. The full page text is already kept on
-  `Observation.full_text` and in every trace, so scoring is never limited by what the model was shown.
+- **Paginated observation** (`_ELEMENT_PAGE=80`, `_TEXT_PAGE=1800`, `_HISTORY_PAGE=10`, a 400-element
+  cap in `observe.js`, names clipped to 80–120 characters). jev sees one page of elements, page text
+  and history at a time. Nothing is dropped silently: whatever is held back is counted in `not_shown`
+  and `show_more` reveals it. The full page text is kept on `Observation.full_text` and in every
+  trace, so scoring is never limited by what the model was shown. The remaining judgement is the
+  order pages are walked in — see **Element ordering** below.
+- **Element ordering** (`ranked_elements`, `actions.py`). Elements are ordered blocking-dialog first,
+  then on screen, and pagination walks that order. Both terms are facts about the page rather than
+  guesses at relevance: a modal blocks every other control until it is dealt with, so it has to be on
+  the first page however large the page is. An earlier version also scored goal-word overlap; it was
+  measured to be noise and removed — see [decisions.md](decisions.md).
 - **Label stand-in** (`observe.js` `standIn`). A form control styled `sr-only` has no box of its own,
   so the `<label>` that a person actually sees and clicks is observed and acted on in its place. The
   browser forwards a label click to its control, so this is the mechanically correct target, not a
@@ -112,7 +120,7 @@ indistinguishable from the model's own behaviour in every eval that follows.
   [evals/offline/test_unit.py](../evals/offline/test_unit.py): a blocked click is reported rather than
   suppressed, an ad gate is never auto-accepted, an ordinary dialog is left alone, `back` does not
   claim to have moved when it has not.
-- Rule 3 (action space) is visible in `ACTIONS` in [jev_evals/actions.py](../jev_evals/actions.py).
+- Rule 3 (action space) is visible in `ACTIONS` in [peregrine/actions.py](../peregrine/actions.py).
   Adding a verb that decides something is the failure mode to watch for.
-- Rule 5 (inspectability) is [jev_evals/trace.py](../jev_evals/trace.py); every run writes what jev
+- Rule 5 (inspectability) is [peregrine/trace.py](../peregrine/trace.py); every run writes what jev
   saw and what the DOM held.

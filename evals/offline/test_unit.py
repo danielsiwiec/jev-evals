@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from evals.local_browser import chrome_available, find, open_tab
-from jev_evals.page import Tab
+from peregrine.page import Tab
 
 PAGES = Path(__file__).parent / "pages"
 
