@@ -79,12 +79,26 @@ below 5: each run is a full Chrome, and the sites are shared.
 Comparative runs (driver against driver) should stay serial. Concurrency adds contention that is not
 part of what is being compared.
 
-**Headed runs cannot be hidden on macOS.** Every off-screen `--window-position`, positive or
-negative, is clamped back to the top-left of the desktop — measured at `0, 33` for `-2400,0`,
-`5000,0` and `-3000,-3000` alike. A headed run puts windows on the screen, full stop. Headless is the
-default and costs nothing: at n=25 both scored 22/25, with medians of 8.0s and 8.6s. Use
-`EVAL_HEADLESS=0` only when you intend to watch, and expect windows. For a headed run on a machine
-you are using, a separate desktop Space is the only thing that actually works.
+**A headed window is always visible, but it need not hold focus.** Every off-screen
+`--window-position`, positive or negative, is clamped back to the top-left of the desktop — measured
+at `0, 33` for `-2400,0`, `5000,0` and `-3000,-3000` alike. The window appears and no flag prevents
+it.
+
+Focus is a different matter. Chrome takes the front on launch and again every time a tab opens, so
+suppressing `bring_to_front` was never enough. `BROWSER_KEEP_FOCUS_ON=<app>` names an application to
+hand focus straight back to, at every point Chrome grabs it:
+
+```bash
+BROWSER_KEEP_FOCUS_ON=Code EVAL_HEADLESS=0 EVAL_RUNS=2 make e2e
+```
+
+Measured by sampling the frontmost process every two seconds: serial headed runs kept focus on Code
+for 14 of 14 samples across two runs. Four in parallel leaked 2 of 16 samples, because four Chromes
+launching at once outrace the hand-back. macOS only, no-op unless set, and never allowed to fail a
+run.
+
+Headless remains the default and costs nothing: at n=25 both modes scored 22/25, with medians of 8.0s
+and 8.6s. Use headed when you want to watch; use headless when you want the machine.
 
 ## Current targets
 

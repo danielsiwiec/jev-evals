@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -100,6 +101,7 @@ class HostBrowser:
         page.set_default_timeout(_ACTION_TIMEOUT_MS)
         page.set_default_navigation_timeout(_NAV_TIMEOUT_MS)
         await _bring_to_front(page)
+        await _give_focus_back()
         return page
 
     async def pages(self) -> list[Page]:
@@ -183,11 +185,14 @@ class Tab:
         self._opened.extend(p for p in opened if p not in self._opened)
         self.adopt(page)
         await _bring_to_front(page)
+        await _give_focus_back()
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
         except PlaywrightError:
             pass
         await self.settle()
+        # Chrome can raise itself again while the new page paints, so hand focus back once more.
+        await _give_focus_back()
         return f"opened new tab {page.url}"
 
     async def _outcome(self, before: list[Page], default: str) -> str:
@@ -219,6 +224,7 @@ class Tab:
         self._opened_at.setdefault(id(page), time.time())
         try:
             await page.goto(url, wait_until="domcontentloaded")
+            await _give_focus_back()
         except PlaywrightError as error:
             if _DOWNLOAD_ERROR.search(str(error)):
                 return "download started"
@@ -410,6 +416,7 @@ class Tab:
         self._opened = [p for p in self._opened if p is not page]
         self.adopt(target)
         await _bring_to_front(target)
+        await _give_focus_back()
         await self.settle()
         return f"closed the tab and went back to {target.url}"
 
@@ -474,6 +481,27 @@ async def _safe_title(page: Page) -> str:
         return await page.title()
     except PlaywrightError:
         return ""
+
+
+_KEEP_FOCUS_ON = os.getenv("BROWSER_KEEP_FOCUS_ON", "")
+
+
+async def _give_focus_back() -> None:
+    """Chrome takes the front every time a tab opens, and no flag prevents it.
+
+    Naming an app to put back in front hands focus straight back, so a headed run can proceed
+    without sitting on top of whatever the person is doing. macOS only, and a no-op unless asked.
+    """
+    if not _KEEP_FOCUS_ON or sys.platform != "darwin":
+        return
+    script = f'tell application "System Events" to set frontmost of process "{_KEEP_FOCUS_ON}" to true'
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "osascript", "-e", script, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.wait_for(process.wait(), timeout=3)
+    except Exception:  # noqa: BLE001 - never let cosmetics break a run
+        pass
 
 
 def _may_take_focus() -> bool:

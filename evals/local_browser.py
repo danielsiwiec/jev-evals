@@ -3,6 +3,7 @@ import contextlib
 import os
 import shutil
 import socket
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -15,6 +16,9 @@ CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/Ma
 HEADLESS = os.getenv("EVAL_HEADLESS", "1").lower() in ("1", "true", "yes")
 WINDOW = os.getenv("EVAL_WINDOW", "1440,900")
 OFFSCREEN = os.getenv("EVAL_WINDOW_POSITION", "0,0")
+# A headed Chrome takes focus when it launches and macOS offers no flag to stop it. Naming the app
+# to put back in front restores it a moment later; the window is still visible, just not in the way.
+RESTORE_FOCUS_TO = os.getenv("EVAL_RESTORE_FOCUS_TO") or os.getenv("BROWSER_KEEP_FOCUS_ON", "")
 _START_S = 20.0
 
 
@@ -58,6 +62,7 @@ async def fresh_chrome(headless: bool = HEADLESS):
         stderr=asyncio.subprocess.DEVNULL,
     )
     endpoint = f"http://127.0.0.1:{port}"
+    await _restore_focus(headless)
     try:
         deadline = time.perf_counter() + _START_S
         async with httpx.AsyncClient(timeout=2.0) as client:
@@ -68,6 +73,7 @@ async def fresh_chrome(headless: bool = HEADLESS):
                 await asyncio.sleep(0.25)
             else:
                 raise RuntimeError(f"chrome did not expose CDP at {endpoint}")
+        await _restore_focus(headless)
         yield endpoint
     finally:
         with contextlib.suppress(ProcessLookupError):
@@ -82,6 +88,17 @@ async def fresh_chrome(headless: bool = HEADLESS):
 
 
 @contextlib.asynccontextmanager
+async def _restore_focus(headless: bool) -> None:
+    if headless or not RESTORE_FOCUS_TO or sys.platform != "darwin":
+        return
+    script = f'tell application "System Events" to set frontmost of process "{RESTORE_FOCUS_TO}" to true'
+    with contextlib.suppress(Exception):
+        process = await asyncio.create_subprocess_exec(
+            "osascript", "-e", script, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.wait_for(process.wait(), timeout=5)
+
+
 async def open_tab(url: str, headless: bool = HEADLESS):
     async with fresh_chrome(headless) as endpoint:
         host = HostBrowser(endpoint)
