@@ -121,6 +121,8 @@ async def judge(
         # were needed to report it.
         state["the_answer_was_on_screen_from_step"] = answer_visible_from
     marked = _mark_after_answer(steps, answer_visible_from)
+    # The judge reads the sequence as context for every question, so it must carry the markers too.
+    state["actions_taken_in_order"] = marked
     questions = {
         f"step_{_key(step)}": Choice(
             instructions=f"What was this action for, judged against `goal`: {shown!r}?",
@@ -129,7 +131,11 @@ async def judge(
         for step, shown in zip(steps, marked, strict=True)
     }
     answers = await client.ask(state, questions, usage)
-    labels = [(step, str(answers[f"step_{_key(step)}"].choice)) for step in steps if f"step_{_key(step)}" in answers]
+    labels = [
+        (shown, str(answers[f"step_{_key(step)}"].choice))
+        for step, shown in zip(steps, marked, strict=True)
+        if f"step_{_key(step)}" in answers
+    ]
     if jev is None:
         await client.close()
     return Efficiency(labels, usage.cost_usd)

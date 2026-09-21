@@ -157,9 +157,9 @@ after the answer appeared.
 can do and the raw outcome buried it behind a hundred characters of tracking URL. It now reads *"this
 opened a NEW TAB and the run carried on there, away from the page it was on"*.
 
-Measured at n=8: **42% progressing**, 22% overcontinuing, 20% exploratory, 13% redundant, 2%
-misdirected. **Target: ≥ 40% progressing**, at the same n=25 as the pass rate. Overcontinuing at 22%
-is now the largest kind of waste and the clearest thing to fix. Earlier figures of 70% and 37% came from the score-based version and are not the same
+Measured at n=8: **47% progressing**, 20% redundant, 19% overcontinuing, 11% exploratory, 3% failed.
+**Target: ≥ 45% progressing**, at the same n=25 as the pass rate. Redundant and overcontinuing
+together are 39% of all actions, and are the two clearest things to fix. Earlier figures of 70% and 37% came from the score-based version and are not the same
 measurement.
 
 **Known bias: on the refinance eval, jev is grading its own work.** For the other drivers it is an
@@ -179,7 +179,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
-| efficiency (progressing) | 42% (n=8) | **≥ 40%** | 25 |
+| efficiency (progressing) | 47% (n=8) | **≥ 45%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.

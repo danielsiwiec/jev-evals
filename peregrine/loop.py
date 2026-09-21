@@ -147,6 +147,10 @@ async def run_goal(
                 # is caught by the no-progress guard instead of paging until it runs out of steps.
                 targets.append("show_more")
                 narrated.append(f"{step}. asked to see more of the page than was being shown")
+                # Paging does not act on the page, but the screens list is read by index against
+                # the narrative, so it must gain an entry for every narrated step or the two drift
+                # apart and the answer is reported as appearing later than it did.
+                screens.append(observation.full_text or observation.text)
                 trace.step(step, state, observation, decision, entry.split("-> ", 1)[1])
                 if on_step is not None:
                     await on_step(step, entry)
