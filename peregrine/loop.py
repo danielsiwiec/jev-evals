@@ -99,6 +99,7 @@ async def run_goal(
 
     helper = TextHelper()
     trace = Trace(getattr(decider, "model", "jev"), goal)
+    await trace.start_browser_trace(tab)
     with start_span("browser_run") as span:
         span.set_attribute("browser.goal", goal[:200])
         for step in range(1, max_steps + 1):
@@ -190,6 +191,7 @@ async def run_goal(
         span.set_attribute("browser.status", status)
         span.set_attribute("browser.steps", len(history))
         span.set_attribute("gen_ai.usage.cost_usd", usage.cost_usd)
+        await trace.stop_browser_trace(tab)
         trace.finish(status, reason)
 
     return BrowseResult(

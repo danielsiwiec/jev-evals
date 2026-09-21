@@ -67,9 +67,21 @@ re-run and guessed at. Each step records `seen_by_jev` (the exact state passed t
 excerpt), the decision with its probabilities, and the outcome. This is what makes rule 2 checkable:
 when a model does something inexplicable, the trace shows whether it was shown the truth.
 
-Traces land in `.traces/` (`EVAL_TRACE_DIR`), one file per run, named by timestamp and model;
-`BrowseResult.trace_path` points at the file. Set `EVAL_TRACE=0` to switch it off. The directory is
-gitignored — traces contain whole page texts.
+Traces land in `.traces/` (`EVAL_TRACE_DIR`), one file per run, named by timestamp, model and a
+per-run suffix — parallel runs start in the same second, and without the suffix several interleave
+into one file. `BrowseResult.trace_path` points at the file. Set `EVAL_TRACE=0` to switch it off.
+`EVAL_TRACE_SHOTS=1` adds before and after screenshots per step. The directory is gitignored —
+traces contain whole page texts.
+
+**A second, independent recording.** Everything above is the harness's account of itself: the action
+it chose, the outcome it inferred, the observation it built. When that account is wrong there is
+nothing to check it against, and it has been wrong — a click reported as landing when an overlay took
+it, an action reported as typed into a field that discarded it. `EVAL_BROWSER_TRACE=1` records
+Playwright's own trace alongside, written by the browser rather than by us: DOM snapshots, a
+screencast, network requests and console messages. One run produced 260 frame snapshots, 156
+screencast frames and 27 console messages. Open it with `playwright show-trace <file>.browser.zip`
+and compare it against the harness's story of the same run. It is off by default because a run costs
+about 12 MB.
 
 **6. The harness is as dumb as possible, and every exception is documented.** Mechanics are allowed —
 resolving where a click lands, waiting for a load, capturing an outcome. Judgement is not. Anything
