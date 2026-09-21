@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +15,14 @@ class Trace:
         self.path: Path | None = None
         if not ENABLED:
             return
+        # Parallel runs start within the same second, so a second-resolution stamp alone collides
+        # and several runs interleave into one file. A per-run suffix keeps them apart.
         stamp = time.strftime("%Y%m%d-%H%M%S")
         safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in label)[:60]
+        unique = uuid.uuid4().hex[:6]
         TRACE_DIR.mkdir(parents=True, exist_ok=True)
-        self.path = TRACE_DIR / f"{stamp}-{safe}.jsonl"
-        self.shots = TRACE_DIR / f"{stamp}-{safe}" if SHOTS else None
+        self.path = TRACE_DIR / f"{stamp}-{safe}-{unique}.jsonl"
+        self.shots = TRACE_DIR / f"{stamp}-{safe}-{unique}" if SHOTS else None
         if self.shots is not None:
             self.shots.mkdir(parents=True, exist_ok=True)
         self._write({"kind": "run", "label": label, "goal": goal, "started": stamp})

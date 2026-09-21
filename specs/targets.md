@@ -147,13 +147,19 @@ around 0.46 even on runs that succeed, so the peak is used instead.
 only it can say when further work stopped being necessary. Each step's page text is kept on
 `BrowseResult.screens`, and the refinance eval scans it for the lender and rate its scorer already
 looks for, then tells the judge the first step where both were visible. Judging is deferred until
-after scoring for this reason. With it, `overcontinuing` fires where it should -- on scrolling and
-closing dialogs after the answer was up -- and rose from 1% to 4% of actions. Without it the judge
-had no way to tell necessary work from work done after the goal was met.
+after scoring for this reason. The step number alone was not enough: it left the judge to do the arithmetic for every action, and
+`overcontinuing` only reached 4%. Saying it on the action itself -- *"[the answer was already on
+screen before this]"* -- puts the right question in front of the judge, and it reached **22%**. On a
+synthetic trace the same change takes a run from 100% progressing to 62%, flipping the three actions
+after the answer appeared.
 
-Measured at n=8: **52% progressing**, with the rest 23% exploratory, 17% redundant, 6% failed, and
-1% each overcontinuing and misdirected. **Target: ≥ 50% progressing**, at the same n=25 as the pass
-rate. Earlier figures of 70% and 37% came from the score-based version and are not the same
+**Leaving the page is said plainly too.** Opening a new tab is the most consequential thing an action
+can do and the raw outcome buried it behind a hundred characters of tracking URL. It now reads *"this
+opened a NEW TAB and the run carried on there, away from the page it was on"*.
+
+Measured at n=8: **42% progressing**, 22% overcontinuing, 20% exploratory, 13% redundant, 2%
+misdirected. **Target: ≥ 40% progressing**, at the same n=25 as the pass rate. Overcontinuing at 22%
+is now the largest kind of waste and the clearest thing to fix. Earlier figures of 70% and 37% came from the score-based version and are not the same
 measurement.
 
 **Known bias: on the refinance eval, jev is grading its own work.** For the other drivers it is an
@@ -173,7 +179,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
-| efficiency (progressing) | 52% (n=8) | **≥ 50%** | 25 |
+| efficiency (progressing) | 42% (n=8) | **≥ 40%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.

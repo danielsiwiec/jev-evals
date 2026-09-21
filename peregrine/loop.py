@@ -307,12 +307,19 @@ def _narrate(
     # action. Saying "it worked" asserts the second, and invites a reader to approve of a value put
     # in the wrong field. The neutral report is what the browser did.
     plain = outcome.replace(" (page unchanged)", "")
-    effect = {
-        "clicked": "the click landed",
-        "typed": "the text went in",
-        "selected": "the option was chosen",
-        "pressed": "the key was sent",
-    }.get(plain, plain)
+    # Leaving the page the goal lives on is the most consequential thing an action can do, and the
+    # raw outcome buries it behind a hundred characters of tracking URL.
+    if plain.startswith("opened new tab"):
+        effect = "this opened a NEW TAB and the run carried on there, away from the page it was on"
+    elif plain.startswith("closed the tab"):
+        effect = "this closed the tab and went back to the previous one"
+    else:
+        effect = {
+            "clicked": "the click landed",
+            "typed": "the text went in",
+            "selected": "the option was chosen",
+            "pressed": "the key was sent",
+        }.get(plain, plain)
     # "unchanged" is a fingerprint over the first 600 characters and 60 elements, so a filter set
     # inside a dialog legitimately shows no change. Saying it plainly invites a reader to treat a
     # correct action as a failure, so it is only worth mentioning when the action repeated itself.

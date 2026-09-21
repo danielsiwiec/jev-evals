@@ -62,6 +62,22 @@ class Efficiency:
         return f"{self.ratio:.0%} ({self.contributing}/{self.total} progressing; {parts})"
 
 
+def _mark_after_answer(steps: list[str], answer_visible_from: int) -> list[str]:
+    """Say on the action itself that the goal was already answered.
+
+    Putting the step number in the state alone leaves the judge to do the arithmetic for every
+    action. Saying it on the line makes the question in front of it the right one: this was done
+    after the run already had what it came for.
+    """
+    if not answer_visible_from:
+        return list(steps)
+    marked = []
+    for index, step in enumerate(steps, start=1):
+        suffix = " [the answer was already on screen before this]" if index > answer_visible_from else ""
+        marked.append(step + suffix)
+    return marked
+
+
 def _key(step: str) -> str:
     match = _STEP.match(step)
     return match.group(1) if match else step[:12]
@@ -104,12 +120,13 @@ async def judge(
         # been answered from what was on screen, so later actions are overcontinuing unless they
         # were needed to report it.
         state["the_answer_was_on_screen_from_step"] = answer_visible_from
+    marked = _mark_after_answer(steps, answer_visible_from)
     questions = {
         f"step_{_key(step)}": Choice(
-            instructions=f"What was this action for, judged against `goal`: {step!r}?",
+            instructions=f"What was this action for, judged against `goal`: {shown!r}?",
             criteria=dict(LABELS),
         )
-        for step in steps
+        for step, shown in zip(steps, marked, strict=True)
     }
     answers = await client.ask(state, questions, usage)
     labels = [(step, str(answers[f"step_{_key(step)}"].choice)) for step in steps if f"step_{_key(step)}" in answers]
