@@ -87,7 +87,6 @@ async def fresh_chrome(headless: bool = HEADLESS):
         shutil.rmtree(profile, ignore_errors=True)
 
 
-@contextlib.asynccontextmanager
 async def _restore_focus(headless: bool) -> None:
     if headless or not RESTORE_FOCUS_TO or sys.platform != "darwin":
         return
@@ -99,6 +98,7 @@ async def _restore_focus(headless: bool) -> None:
         await asyncio.wait_for(process.wait(), timeout=5)
 
 
+@contextlib.asynccontextmanager
 async def open_tab(url: str, headless: bool = HEADLESS):
     async with fresh_chrome(headless) as endpoint:
         host = HostBrowser(endpoint)
