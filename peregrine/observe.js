@@ -27,7 +27,7 @@
     const r = el.getBoundingClientRect();
     const stand = standIn(el);
     const box = (r.width > 1 && r.height > 1) ? r : (stand ? stand.getBoundingClientRect() : null);
-    return !!box && box.bottom > -vh && box.top < vh * 3;
+    return !!box;
   };
   const nameOf = (el) => {
     const aria = el.getAttribute("aria-label");
@@ -86,7 +86,8 @@
   const elements = [];
   let ref = 0;
   for (const el of document.body ? document.querySelectorAll(SELECTOR) : []) {
-    if (seen.has(el) || !visible(el)) continue;
+    if (seen.has(el)) continue;
+    if (!visible(el)) continue;
     seen.add(el);
     const raw = el.getBoundingClientRect();
     const stand = standIn(el);

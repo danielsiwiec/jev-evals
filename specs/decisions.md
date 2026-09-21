@@ -76,6 +76,22 @@ the harness spends waiting. Rewriting the transport in raw CDP would target roug
 requiring us to rebuild tab adoption, dialog handling, downloads and navigation waits — all of which
 are load-bearing for the evals. Playwright stays.
 
+## Everything rendered is offered; there is no viewport band
+
+`observe.js` used to emit only elements within a band from one viewport above to three below, which
+silently dropped 282 of 533 candidates on Bankrate — thirteen times more than pagination withheld,
+and without telling jev they existed. The band was a guess about what would be reachable.
+
+It is gone. Anything rendered is emitted, ranking puts dialogs and on-screen elements first, and
+pagination bounds what is sent per page while `not_shown` counts the rest. Eight runs after the
+change found the answer and reported done eight times out of eight, against three of four before,
+and used *fewer* input tokens — about 60k against 73k. Offering more and ranking it well beats
+filtering early and guessing.
+
+Raising the page-text slice from 1800 to 6000 characters was tried at the same time and reverted: it
+cost about 30k more tokens per run for no gain, and the second batch was worse than baseline. jev
+pages through text with `show_more` when it needs to.
+
 ## Known-failing evals are kept failing
 
 `test_jev_saves_the_file_once_the_host_becomes_ready` reproduces premature done: jev clicks before an
