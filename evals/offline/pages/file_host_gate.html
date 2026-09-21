@@ -12,9 +12,12 @@
       whose only control is an icon-style button whose visible text and accessible name differ
     - the toolbar is not laid out until the gate is gone, so the primary action measures 0x0
       and is not a click target while the overlay is up
-    - the preparing state does not resolve: watched for over three minutes after the gate was
-      cleared, the body still read "preparing" and the primary action still measured 0x0, so it
-      was never a click target at all — the page is permanently unable to serve the file
+    - once the gate is cleared the toolbar lays out normally and the primary action is a real,
+      visible, enabled target (127x40 on the observed page). It is offered to the agent, the click
+      genuinely lands, and the harness correctly reports "clicked"
+    - but the preparing state never resolves — watched for over three minutes, the body still read
+      "preparing" — so the click is a silent no-op. Nothing refuses it and nothing happens. This is
+      the failure the agent cannot distinguish from success without external scoring.
 
   ?prepare=N finishes preparing after N seconds. ?gate=0 starts with no gate at all.
 -->
@@ -77,12 +80,15 @@
 
   // The toolbar is not laid out until the gate is gone, so the primary action
   // measures 0x0 and cannot be clicked while the overlay is up.
+  // The toolbar is hidden only while the gate is up; clearing the gate reveals a fully
+  // functional-looking toolbar whose primary action does nothing while the file is not ready.
   const showToolbar = on => $('toolbar').style.display = on ? 'flex' : 'none';
   showToolbar(false);
 
   if (q.get('gate') === '0') {
     $('privacy-root').remove();
     window.gateCleared = true;
+    showToolbar(true);
     document.title = 'GATE_SKIPPED';
   }
 
@@ -96,13 +102,13 @@
     window.gateCleared = true;
     // The toolbar only lays out once the file is ready; on the real page that never happened,
     // so clearing the gate reveals a page that still cannot be acted on.
-    if (window.ready) showToolbar(true);
+    showToolbar(true);
     document.title = 'GATE_CLEARED';
   };
   $('close1').onclick = () => {
     $('step1').classList.add('hidden');
     window.gateCleared = true;
-    if (window.ready) showToolbar(true);
+    showToolbar(true);
     document.title = 'GATE_DISMISSED';
   };
 
@@ -116,7 +122,6 @@
       window.ready = true;
       $('status').textContent = 'Ready';
       $('dots').remove();
-      if (window.gateCleared) showToolbar(true);
       document.title = 'READY';
     }, Number(prepare) * 1000);
   }

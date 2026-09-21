@@ -2,6 +2,51 @@
 
 Browser-agent evals comparing three models — `jev`, `gemini`, `luna` — on the same decision loop. See [README.md](README.md) for what they measure and how the pieces fit together.
 
+## Harness philosophy
+
+The harness is a pair of hands, not a second brain. Three rules, in order of precedence:
+
+**1. All decision making is delegated to jev.** The harness never decides *what* to do — which element
+to act on, whether a dialog should be dismissed, whether a goal is met, whether to give up. It executes
+one decision and reports what happened. When a page misbehaves, the fix is almost never harness logic;
+it is giving jev truer information so it can decide better. Two bugs in this repo came from breaking
+this rule: the harness pressed a consent dialog's own button before jev could choose, and it suppressed
+blocking overlays with `pointer-events: none` and reported a phantom `clicked`. Both looked like model
+failures and were not.
+
+**2. jev receives the real, unfiltered state.** What jev sees must be what is actually on the page.
+Never hide an element because it looks unimportant, never soften an outcome, never report an action as
+having succeeded when it did not. A failed click says it failed and names what blocked it. A typed
+value that the page discarded says so. Two more bugs came from breaking this rule: `observe.js` dropped
+the 1x1 `sr-only` radios that *are* the zero-point filter, making the goal unreachable, and a blocked
+click reported `clicked`, so jev waited for something that had never happened.
+
+**3. The harness is as dumb as possible, and every exception is documented.** Mechanics are allowed —
+resolving where a click lands, waiting for a load, capturing an outcome. Judgement is not. Anything
+that is not purely mechanical is an exception, and an exception must be written down here with its
+reason. The current list is short by design:
+
+- **Element pruning** (`prune`, `BROWSER_MAX_CANDIDATES=80`). Ranks by goal-word overlap, dialog
+  membership and viewport, then keeps the top N. A budget limit, not a judgement about relevance, but
+  it *can* hide a needed control on a very large page. Raise the budget before trusting the ranking.
+- **Text excerpt** (`_TEXT_EXCERPT=1800`). jev sees the first 1800 characters of page text. The full
+  text is kept on `Observation.full_text` for external scoring, so the scorer is never limited by what
+  the model was shown.
+- **History window** (`_HISTORY_WINDOW=10`). The last ten actions. Shorter than this and a repeating
+  loop becomes invisible to the model deciding whether it is repeating itself.
+- **Label proxying** (`observe.js` `proxy`, `Tab._clickable`). A form control with no box of its own is
+  measured and clicked through its `<label>`. This is how the browser itself treats a label, and
+  without it every `sr-only` radio and checkbox is invisible and unclickable.
+- **Overriding an impossible decision** (`loop.py`). If jev names a target that is not in the
+  observation, or says `done` while `goal_met` is below 0.5, the loop falls back to its next-best
+  action rather than executing a decision that cannot be carried out.
+- **Loop guards** (`_repeating`, `_thrashing`, `wait` backoff, `max_steps`, `timeout_s`). The harness
+  stops a run that is going nowhere. This is resource control, not task reasoning: it never changes
+  what jev is asked, only how long it is allowed to keep asking.
+
+Anything beyond this list should be deleted or promoted to a documented exception. When in doubt,
+report more to jev and decide less.
+
 ## The eval suites
 
 Two axes: **offline** (our own HTML fixtures) against **online** (real sites), and **unit**

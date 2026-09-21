@@ -51,5 +51,5 @@ async def test_jev_does_not_claim_success_when_the_file_never_becomes_ready():
 
 
 async def test_jev_saves_the_file_once_the_host_becomes_ready():
-    result, title = await _run("file_host_gate.html?prepare=4", SAVE_GOAL)
+    result, title = await _run("file_host_gate.html?prepare=6", SAVE_GOAL)
     assert title == "SAVE_STARTED", f"status={result.status} title={title} steps={result.steps}"

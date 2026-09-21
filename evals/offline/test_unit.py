@@ -152,22 +152,37 @@ async def test_file_host_gate_takes_two_steps_to_clear():
         assert await tab.evaluate("() => document.title") == "GATE_CLEARED"
 
 
-async def test_file_host_that_never_becomes_ready_offers_nothing_to_click():
+async def test_file_host_click_succeeds_but_nothing_happens_when_never_ready():
+    """The offline twin of the LimeWire failure.
+
+    Once the gate is cleared the action is a real, visible, enabled target. The click lands and
+    the harness correctly reports "clicked". The file is never ready, so nothing happens — the
+    agent cannot tell this apart from success without external scoring.
+    """
     async with _tab("file_host_gate.html") as tab:
         await tab.click((await _find(tab, "CONFIRM")).ref)
         await tab.click((await _find(tab, "Close confirmation")).ref)
+
+        save = await _find(tab, "Save file")
+        assert save is not None, "the action must be offered once the gate is cleared"
+        outcome = await tab.click(save.ref)
+        assert outcome == "clicked", f"the click genuinely lands, it is not blocked: {outcome}"
+        assert "blocked" not in outcome
+
         await tab.sleep(3)
-        assert await _find(tab, "Save file") is None, "the file never becomes ready, so the primary action stays absent"
+        assert await tab.evaluate("() => document.title") == "NOT_READY"
         assert "Preparing" in (await tab.observe()).full_text
 
 
-async def test_file_host_becomes_actionable_once_it_is_ready():
-    async with _tab("file_host_gate.html", "?prepare=2") as tab:
+async def test_file_host_saves_once_it_becomes_ready():
+    async with _tab("file_host_gate.html", "?prepare=6") as tab:
         await tab.click((await _find(tab, "CONFIRM")).ref)
         await tab.click((await _find(tab, "Close confirmation")).ref)
-        assert await _find(tab, "Save file") is None
-        await tab.sleep(3)
-        save = await _find(tab, "Save file")
-        assert save is not None, "once ready, the primary action must appear"
-        await tab.click(save.ref)
+
+        # Clicking too early lands cleanly and still does nothing.
+        await tab.click((await _find(tab, "Save file")).ref)
+        assert await tab.evaluate("() => document.title") == "NOT_READY"
+
+        await tab.sleep(8)
+        await tab.click((await _find(tab, "Save file")).ref)
         assert await tab.evaluate("() => document.title") == "SAVE_STARTED"
