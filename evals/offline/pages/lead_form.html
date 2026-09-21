@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Start your application</title>
+<!--
+  The noisy dead end. Nothing here advances the goal: it is a lead capture form with many
+  plausible-looking controls. Reaching it is a wrong turn, and the way out is to close it.
+-->
+<body style="margin:0;font:16px system-ui;padding:24px">
+<h1>Start your application</h1>
+<p>Tell us about yourself and a specialist will call you back.</p>
+<form onsubmit="event.preventDefault(); document.title='LEAD_SUBMITTED'">
+  <p><label for="fn">First name</label> <input id="fn"></p>
+  <p><label for="ln">Last name</label> <input id="ln"></p>
+  <p><label for="em">Email address</label> <input id="em" type="email"></p>
+  <p><label for="ph">Phone number</label> <input id="ph" type="tel"></p>
+  <p><label for="emp">Employment status</label>
+     <select id="emp"><option>Employed</option><option>Self-employed</option></select></p>
+  <p><label for="inc">Annual income</label> <input id="inc"></p>
+  <p><label><input type="checkbox" id="ok"> I agree to be contacted</label></p>
+  <p><button id="next">Get started</button>
+     <button id="continue" type="button">Continue application</button>
+     <button id="callme" type="button">Request a callback</button></p>
+</form>

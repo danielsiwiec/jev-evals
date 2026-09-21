@@ -45,6 +45,14 @@ A tab opened by a link has no history, so `back` cannot leave it. `close_tab` cl
 returns to the one it was opened from, tracked at adoption. One action rather than two, because
 closing a tab is one thing a person does and it lands them where they came from.
 
+## close_tab is verified by an eval that fails without it
+
+`test_jev_leaves_a_dead_end_tab_and_returns_to_the_goal` opens four tabs — two unrelated, the one
+holding the answer, and a noisy lead form opened from it — and lands jev on the lead form. jev closes
+it on the first step and returns to the answer, three runs out of three. Removing `close_tab` from the
+action space makes the same eval fail with jev calling `back` three times and getting nowhere, which
+is what the action was added to fix.
+
 ## Known-failing evals are kept failing
 
 `test_jev_saves_the_file_once_the_host_becomes_ready` reproduces premature done: jev clicks before an

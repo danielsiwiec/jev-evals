@@ -335,6 +335,14 @@ class Tab:
         await asyncio.sleep(0.3)
         return "scrolled"
 
+    async def adopt_last(self) -> str:
+        pages = [p for p in await self._siblings() if not p.is_closed()]
+        if not pages:
+            return "no tabs are open"
+        self.adopt(pages[-1])
+        await self.settle()
+        return f"now on {pages[-1].url}"
+
     async def tabs(self) -> list[dict[str, Any]]:
         """Every open tab, so jev can see it left one behind rather than infer it from a title."""
         current = self.page
