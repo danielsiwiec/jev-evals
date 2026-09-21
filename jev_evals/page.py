@@ -116,6 +116,8 @@ class Tab:
         self._dialogs: list[str] = []
         self._watched: set[int] = set()
         self._opened: list[Page] = []
+        # Which tab was in front when a new one opened, so closing returns where a person would land.
+        self._opener: dict[int, Page] = {}
 
     @property
     def page(self) -> Page | None:
@@ -163,6 +165,9 @@ class Tab:
         if not opened:
             return None
         page = opened[-1]
+        previous = self.page
+        if previous is not None:
+            self._opener[id(page)] = previous
         self._opened.extend(p for p in opened if p not in self._opened)
         self.adopt(page)
         await _bring_to_front(page)
@@ -326,6 +331,31 @@ class Tab:
         await asyncio.sleep(0.3)
         return "scrolled"
 
+    async def close_tab(self) -> str:
+        page = self.page
+        if page is None:
+            return "there is no tab to close"
+        opener = self._opener.pop(id(page), None)
+        if opener is not None and opener.is_closed():
+            opener = None
+        others = [
+            p
+            for p in await self._siblings()
+            if p is not page and not p.is_closed() and _without_fragment(p.url) != "about:blank"
+        ]
+        target = opener or (others[-1] if others else None)
+        if target is None:
+            return "this tab was not opened from another one, so it was left alone"
+        try:
+            await page.close()
+        except PlaywrightError as error:
+            return f"closing the tab failed: {_short(error)}"
+        self._opened = [p for p in self._opened if p is not page]
+        self.adopt(target)
+        await _bring_to_front(target)
+        await self.settle()
+        return f"closed the tab and went back to {target.url}"
+
     async def refresh(self) -> str:
         page = await self.ensure()
         before = await self._siblings()
@@ -338,11 +368,14 @@ class Tab:
 
     async def back(self) -> str:
         page = await self.ensure()
+        before = page.url
         try:
             await page.go_back(wait_until="domcontentloaded")
         except PlaywrightError as error:
             return f"back failed: {_short(error)}"
         await self.settle()
+        if page.url == before:
+            return "there is nothing to go back to in this tab's history"
         return "went back"
 
     async def sleep(self, seconds: float) -> str:

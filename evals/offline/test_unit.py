@@ -186,3 +186,30 @@ async def test_file_host_saves_once_it_becomes_ready():
         await tab.sleep(8)
         await tab.click((await _find(tab, "Save file")).ref)
         assert await tab.evaluate("() => document.title") == "SAVE_STARTED"
+
+
+async def test_back_cannot_leave_a_tab_that_has_no_history():
+    async with _tab("new_tab_detour.html") as tab:
+        outcome = await tab.click((await _find(tab, "See offers")).ref)
+        assert "opened new tab" in outcome, outcome
+        assert (await tab.observe()).title == "Offer application"
+        assert "nothing to go back to" in await tab.back(), "back must not claim to have moved"
+        assert (await tab.observe()).title == "Offer application"
+
+
+async def test_close_tab_returns_to_the_tab_it_was_opened_from():
+    async with _tab("new_tab_detour.html") as tab:
+        await tab.click((await _find(tab, "See offers")).ref)
+        outcome = await tab.close_tab()
+        assert "closed the tab" in outcome, outcome
+        assert "new_tab_detour" in outcome, outcome
+        observation = await tab.observe()
+        assert observation.title.startswith("Results")
+        assert await _find(tab, "See offers") is not None
+
+
+async def test_close_tab_leaves_the_only_tab_alone():
+    async with _tab("new_tab_detour.html") as tab:
+        outcome = await tab.close_tab()
+        assert "left alone" in outcome, outcome
+        assert (await tab.observe()).title.startswith("Results")

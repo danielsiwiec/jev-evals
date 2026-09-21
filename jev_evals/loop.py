@@ -261,6 +261,8 @@ async def _perform(
         return await tab.back()
     if action == "refresh":
         return await tab.refresh()
+    if action == "close_tab":
+        return await tab.close_tab()
     if action == "press":
         return await tab.press(decision.key or "Enter")
     if action == "wait":

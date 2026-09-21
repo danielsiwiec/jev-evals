@@ -15,6 +15,7 @@ ACTIONS: dict[str, str] = {
     "scroll_down": "scroll down because what is needed is probably further down the page",
     "scroll_up": "scroll up because what is needed is probably above",
     "back": "go back to the previous page because this page is a dead end",
+    "close_tab": "close this tab and return to the one it was opened from",
     "press": "press a single key such as Enter, Escape or Tab, on the target element if one is given",
     "refresh": "reload the current page",
     "show_more": "reveal the part of this page's elements, text or earlier actions that is being held back",
