@@ -23,6 +23,7 @@ WORKSPACE = [
     "lead_form.html",
 ]
 RATE_GOAL = "Find the lowest mortgage refinance rate with zero points and report the lender and the rate."
+SEARCH_GOAL = "Find out when the next high tide is at the harbour, and report the time."
 SAVE_GOAL = (
     "Save the file offered on this page. Get past any privacy or cookie dialog that stands in the way, "
     "then use the page's own control to save the file."
@@ -103,3 +104,19 @@ async def test_jev_does_not_fill_in_the_dead_end_form():
     result, _ = await _run_with_tabs(WORKSPACE, RATE_GOAL)
     submitted = [s for s in result.steps if "Get started" in s or "Continue application" in s]
     assert not submitted, f"jev worked the lead form instead of leaving it: {submitted}"
+
+
+async def test_jev_can_type_text_the_goal_does_not_supply():
+    """No prepared values: the query has to come from the model.
+
+    BU Bench poses tasks this way -- no URL, no value dict, just an intent. Reaching the answer
+    means typing a query of the agent's own devising into a search box.
+    """
+    result, title = await _run("search_engine.html", SEARCH_GOAL, max_steps=8)
+    assert not any("no text was chosen" in s for s in result.steps), (
+        f"typing was impossible because nothing could be typed: {result.steps}"
+    )
+    assert any("typed" in s for s in result.steps), f"nothing was typed at all: {result.steps}"
+    assert title == "TIDE_PAGE_REACHED", (
+        f"jev did not reach the answer: status={result.status} title={title!r} steps={result.steps}"
+    )

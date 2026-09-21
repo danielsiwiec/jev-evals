@@ -92,6 +92,26 @@ Raising the page-text slice from 1800 to 6000 characters was tried at the same t
 cost about 30k more tokens per run for no gain, and the second batch was worse than baseline. jev
 pages through text with `show_more` when it needs to.
 
+## jev types by selecting a phrase from the goal
+
+jev answers `Choice`, `Noul` and `Score` and cannot generate text. A harness that only lets it type
+values prepared in advance cannot search, and BU Bench showed the cost: with `values={}` no value
+question was even built, so every type returned "no value named None is available" and four of five
+trial tasks died on it. Fifty-nine of the hundred tasks name no URL, so the only way in is a search
+box.
+
+Typing now has two sources. A prepared value wins when the model picks one. Otherwise the model's own
+`text` is used, which generative deciders produce directly and jev selects: `goal_phrases` offers
+quoted spans first, then two-to-four word windows of the goal with stopwords dropped, as a `Choice`.
+Selecting among substrings of the goal is still classification, so the interface is unchanged and
+both driver families keep running the same loop.
+
+It is a real limit, not a workaround dressed up: jev can only type words the goal already contains.
+That is enough to search, and not enough to invent a plausible email address for a signup form.
+
+`Decision.text` already existed and was already parsed by the LLM decider, but `_perform` never read
+it — free text was unreachable for every driver, including gemini and luna.
+
 ## Known-failing evals are kept failing
 
 `test_jev_saves_the_file_once_the_host_becomes_ready` reproduces premature done: jev clicks before an

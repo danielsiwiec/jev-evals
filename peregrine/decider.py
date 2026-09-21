@@ -55,7 +55,7 @@ class JevDecider:
     async def decide(
         self, state: dict[str, Any], values: dict[str, str], elements: list[Element], usage: JevUsage
     ) -> Decision:
-        answers = await self._client.ask(state, build_questions(values, elements), usage)
+        answers = await self._client.ask(state, build_questions(values, elements, goal=state.get("goal", "")), usage)
         return parse_decision(answers)
 
 

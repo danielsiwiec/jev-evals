@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Search</title>
+<!--
+  A plain search engine. Reaching anything here requires typing a query the goal does not
+  supply verbatim, which is the capability BU Bench tasks need and prepared values cannot give.
+-->
+<body style="margin:0;font:16px system-ui;padding:60px;text-align:center">
+<h1>Findit</h1>
+<form id="f">
+  <input id="q" name="q" type="search" placeholder="Search the web" style="width:420px;padding:10px">
+  <button id="go">Search</button>
+</form>
+<div id="results" style="margin-top:30px;text-align:left;max-width:520px;margin-inline:auto"></div>
+<script>
+  const TERMS = ['tide', 'harbour', 'harbor'];
+  function go(){
+    const q = document.getElementById('q').value.trim().toLowerCase();
+    document.title = 'SEARCHED:' + q;
+    const hit = TERMS.some(term => q.includes(term));
+    document.getElementById('results').innerHTML = hit
+      ? '<p><a id="hit" href="tide_result.html">Harbour tide tables</a></p>'
+      : '<p>No results. Try different words.</p>';
+  }
+  document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); go(); });
+</script>

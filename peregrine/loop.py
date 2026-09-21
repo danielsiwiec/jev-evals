@@ -247,10 +247,15 @@ async def _perform(
             return await tab.click(decision.target)
         if action == "press":
             return await tab.press(decision.key or "Enter", decision.target)
-        if action in VALUE_ACTIONS and decision.value not in values:
-            known = ", ".join(sorted(values)) or "none"
-            return f"no value named {decision.value!r} is available; available values are: {known}"
-        value = values.get(decision.value or "", "")
+        if action in VALUE_ACTIONS:
+            # A prepared value wins when one was chosen; otherwise the model's own text is used.
+            if decision.value in values:
+                value = values[decision.value]
+            elif decision.text:
+                value = decision.text
+            else:
+                known = ", ".join(sorted(values)) or "none"
+                return f"no text was chosen to type; available prepared values are: {known}"
         if action in ("type", "submit"):
             return await tab.type(decision.target, value, submit=action == "submit")
         return await tab.select(decision.target, value)

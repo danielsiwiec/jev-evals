@@ -171,6 +171,31 @@ def _page_of(items: list[Any], page: int, size: int) -> tuple[list[Any], int]:
     return items[start : start + size], max(len(items) - start - size, 0)
 
 
+_PHRASE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 .,'&/-]{2,59}")
+_STOP = {"the", "and", "for", "with", "from", "that", "this", "report", "find", "out", "when"}
+
+
+def goal_phrases(goal: str, limit: int = 12) -> list[str]:
+    """Substrings of the goal that could plausibly be typed into a field.
+
+    jev answers Choice/Noul/Score and cannot generate text, so free typing is offered to it as a
+    selection among phrases the goal already contains. Quoted spans come first because a task that
+    quotes a string usually means it literally. Generative deciders ignore this and use `text`.
+    """
+    quoted = re.findall(r'"([^"]{2,60})"|\u201c([^\u201d]{2,60})\u201d', goal)
+    phrases = [a or b for a, b in quoted]
+    words = [w for w in re.findall(r"[A-Za-z0-9'&.-]+", goal) if w.lower() not in _STOP]
+    for size in (4, 3, 2):
+        for i in range(len(words) - size + 1):
+            phrases.append(" ".join(words[i : i + size]))
+    seen: dict[str, None] = {}
+    for phrase in phrases:
+        cleaned = phrase.strip(" .,")
+        if len(cleaned) >= 3:
+            seen.setdefault(cleaned, None)
+    return list(seen)[:limit]
+
+
 def visible_elements(observation: "Observation", goal: str, page: int = 0) -> list["Element"]:
     shown, _ = _page_of(ranked_elements(observation.elements, goal), page, _ELEMENT_PAGE)
     return sorted(shown, key=lambda e: e.ref)
@@ -229,7 +254,9 @@ def _criterion(element: Element, style: str) -> Any:
     return element.describe()
 
 
-def build_questions(values: dict[str, str], elements: list[Element], style: str | None = None) -> dict[str, Any]:
+def build_questions(
+    values: dict[str, str], elements: list[Element], style: str | None = None, goal: str = ""
+) -> dict[str, Any]:
     style = style or os.getenv("BROWSER_JEV_CRITERIA", "refs")
     if style not in CRITERIA_STYLES:
         style = "full"
@@ -281,6 +308,18 @@ def build_questions(values: dict[str, str], elements: list[Element], style: str 
         instructions="If a single key is to be pressed, which one?",
         criteria=dict.fromkeys(KEYS),
     )
+    typeable = [e for e in elements if e.typeable]
+    if typeable:
+        phrases = goal_phrases(goal)
+        if phrases:
+            questions["text_to_type"] = Choice(
+                instructions=(
+                    "If text must be typed and none of `available_values` fits, which of these phrases "
+                    "from the goal should be typed into the chosen field? Pick the one a person would "
+                    "enter to make progress, for example the terms they would put in a search box."
+                ),
+                criteria=dict.fromkeys(phrases),
+            )
     if values:
         questions["value"] = Choice(
             instructions=(
@@ -352,6 +391,7 @@ def parse_decision(answers: dict[str, Any]) -> Decision:
     action = answers["action"]
     value = answers.get("value")
     key = answers.get("key")
+    typed = answers.get("text_to_type")
     targets: dict[str, tuple[int, float]] = {}
     for name, question in TARGET_QUESTION.items():
         answer = answers.get(question)
@@ -366,6 +406,7 @@ def parse_decision(answers: dict[str, Any]) -> Decision:
     return Decision(
         action=chosen,
         key=str(key.choice) if key is not None else None,
+        text=str(typed.choice) if typed is not None else None,
         target=target,
         value=str(value.choice) if value is not None else None,
         action_confidence=float(getattr(action, "confidence", 0.0) or 0.0),
