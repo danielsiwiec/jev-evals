@@ -47,6 +47,11 @@ async def test_economist_download() -> None:
             row["run"] = index
             row["found"] = file is not None
             row["file"] = file.name if file else "-"
+            judger = row.pop("_judge", None)
+            row.pop("screens", None)
+            if judger is not None:
+                # No text on the page states the answer here; a file either arrived or did not.
+                row.update(await judger())
             if file:
                 file.unlink()
             rows.append(row)

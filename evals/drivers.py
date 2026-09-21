@@ -107,22 +107,10 @@ async def _drive(
         await host.close()
         if isinstance(decider, JevClient):
             await decider.close()
-    efficiency = (
-        await judge(
-            goal,
-            result.narrative or result.steps,
-            reached_at=result.goal_reached_at,
-            values=values,
-        )
-        if EFFICIENCY
-        else None
-    )
-    if efficiency is not None and result.trace_path:
-        _append_efficiency(result.trace_path, goal, efficiency)
     return {
+        "_judge": _judger(goal, result, values) if EFFICIENCY else None,
+        "screens": result.screens,
         "driver": label,
-        "efficiency": efficiency.ratio if efficiency else None,
-        "labels": efficiency.breakdown if efficiency else None,
         "status": result.status,
         "seconds": round(time.perf_counter() - started, 1),
         "model_calls": result.jev_calls,
@@ -160,6 +148,28 @@ DRIVERS = {
     "gemini": llm_driver(GEMINI_MODEL),
     "luna": llm_driver(LUNA_MODEL),
 }
+
+
+def _judger(goal: str, result, values: dict[str, str]):
+    """Judging is deferred so the eval can first say when the answer became visible.
+
+    Only the eval knows the right answer, and without that the judge cannot tell work that was
+    needed from work done after the goal was already met.
+    """
+
+    async def run(answer_visible_from: int = 0) -> dict[str, Any]:
+        efficiency = await judge(
+            goal,
+            result.narrative or result.steps,
+            reached_at=result.goal_reached_at,
+            values=values,
+            answer_visible_from=answer_visible_from,
+        )
+        if result.trace_path:
+            _append_efficiency(result.trace_path, goal, efficiency)
+        return {"efficiency": efficiency.ratio, "labels": efficiency.breakdown}
+
+    return run
 
 
 def _append_efficiency(trace_path: str, goal: str, efficiency) -> None:

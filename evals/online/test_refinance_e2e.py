@@ -24,6 +24,18 @@ RUNS = int(os.getenv("EVAL_RUNS", "1"))
 pytestmark = pytest.mark.skipif(not jev_available(), reason="requires TYPESAFE_API_KEY")
 
 
+def answer_visible_from(screens: list[str], expected: Offer) -> int:
+    """The first step whose page already showed the answer.
+
+    Only the eval knows what the right answer is, so only the eval can say when further work stopped
+    being necessary. The judge is told, and grades what came after accordingly.
+    """
+    for index, text in enumerate(screens, start=1):
+        if rate_in(expected.rate, text) and lender_in(expected.lender, text):
+            return index
+    return 0
+
+
 def _job(name: str):
     async def run() -> dict:
         return await DRIVERS[name](START_URL, OBJECTIVE, VALUES)
@@ -58,6 +70,10 @@ async def test_best_zero_point_refinance_rate() -> None:
     for index, row in enumerate(await gather(jobs)):
         row["run"] = index // max(len(selected()), 1) + 1
         row.update(score(row["summary"], row["url"], expected))
+        judger = row.pop("_judge", None)
+        if judger is not None:
+            row.update(await judger(answer_visible_from(row.pop("screens", []), expected)))
+        row.pop("screens", None)
         rows.append(row)
         print(render([row], "", _COLUMNS).splitlines()[3], flush=True)
     print(render(rows, f"runs={RUNS} loan={LOAN} value={PROPERTY} fico={FICO} zip={ZIP}", _COLUMNS))

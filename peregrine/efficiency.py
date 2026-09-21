@@ -73,6 +73,7 @@ async def judge(
     jev: JevClient | None = None,
     reached_at: int = 0,
     values: dict[str, str] | None = None,
+    answer_visible_from: int = 0,
 ) -> Efficiency:
     """Ask jev, in one call, what each action was for.
 
@@ -98,6 +99,11 @@ async def judge(
         state["values_the_goal_supplies"] = values
     if reached_at:
         state["the_run_came_closest_to_believing_it_was_finished_at_step"] = reached_at
+    if answer_visible_from:
+        # Ground truth from the eval, not the run's own opinion: after this step the goal could have
+        # been answered from what was on screen, so later actions are overcontinuing unless they
+        # were needed to report it.
+        state["the_answer_was_on_screen_from_step"] = answer_visible_from
     questions = {
         f"step_{_key(step)}": Choice(
             instructions=f"What was this action for, judged against `goal`: {step!r}?",

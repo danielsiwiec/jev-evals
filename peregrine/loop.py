@@ -45,6 +45,7 @@ class BrowseResult(BaseModel):
     steps: list[str] = []
     narrative: list[str] = []
     goal_reached_at: int = 0
+    screens: list[str] = []
     decider: str = ""
     jev_calls: int = 0
     jev_tokens: int = 0
@@ -90,6 +91,7 @@ async def run_goal(
     targets: list[str] = []
     narrated: list[str] = []
     history_met: list[float] = []
+    screens: list[str] = []
     waits = 0
     view_page = 0
     observation: Observation | None = None
@@ -154,13 +156,15 @@ async def run_goal(
             before_shot = await trace.shot(tab, step, "before")
             outcome = await _perform(tab, decision, observation, values, waits, helper, goal, history)
             targets.append(f"{decision.action}:{decision.target}")
-            changed = outcome == "download started" or (await tab.observe()).fingerprint() != fingerprints[-1]
+            after = await tab.observe()
+            changed = outcome == "download started" or after.fingerprint() != fingerprints[-1]
             if not changed:
                 outcome += " (page unchanged)"
             entry = f"{step}. {_pending(decision, observation, values)} -> {outcome}"
             history.append(entry)
             history_met.append(decision.goal_met)
             narrated.append(_narrate(step, decision, observation, values, outcome, changed))
+            screens.append(after.full_text or after.text)
             trace.step(
                 step,
                 state,
@@ -194,6 +198,7 @@ async def run_goal(
         steps=history,
         narrative=narrated,
         goal_reached_at=_first_met(history_met),
+        screens=screens,
         decider=decider.model,
         jev_calls=usage.calls,
         jev_tokens=usage.input_tokens,

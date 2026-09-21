@@ -143,6 +143,14 @@ The state also carries the values the goal supplies, and the step where the run 
 believing it was finished. An absolute threshold on `goal_met` was tried and marked nothing: it peaks
 around 0.46 even on runs that succeed, so the peak is used instead.
 
+**The eval says when the answer was already on screen.** Only the eval knows the right answer, so
+only it can say when further work stopped being necessary. Each step's page text is kept on
+`BrowseResult.screens`, and the refinance eval scans it for the lender and rate its scorer already
+looks for, then tells the judge the first step where both were visible. Judging is deferred until
+after scoring for this reason. With it, `overcontinuing` fires where it should -- on scrolling and
+closing dialogs after the answer was up -- and rose from 1% to 4% of actions. Without it the judge
+had no way to tell necessary work from work done after the goal was met.
+
 Measured at n=8: **52% progressing**, with the rest 23% exploratory, 17% redundant, 6% failed, and
 1% each overcontinuing and misdirected. **Target: ≥ 50% progressing**, at the same n=25 as the pass
 rate. Earlier figures of 70% and 37% came from the score-based version and are not the same
