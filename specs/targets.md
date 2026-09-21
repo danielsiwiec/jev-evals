@@ -125,8 +125,29 @@ judge model would settle it and has not been tried.
 across repeats, because several of its actions sit near the threshold. Treat single-run efficiency as
 indicative and the batch mean as the measurement.
 
-Measured at n=8: mean **70%**, and the only run that failed had both the lowest efficiency (47%) and
-the most steps (18). **Target: ≥ 70%**, with the same n=25 as the pass rate.
+**The judge reads a trace written for it, not the debugging one.** The step history the loop keeps
+shows a field's value *before* typing, which reads as the result: a redundant retype of a field that
+already held the value looked more successful than the action that filled it, and scored 0.40 against
+0.49. Element refs are reassigned every observation, so the same field carries a different number
+each step and nothing marks it as the same field. `(page unchanged)` is a fingerprint over the first
+600 characters and 60 elements, so setting a filter inside a dialog legitimately shows no change --
+and saying so plainly made the judge read correct actions as failures.
+
+`BrowseResult.narrative` renders each action as intent and effect: *"typed '950000' into 'Property
+value' which held '830,000'; it worked"* against *"typed '950000' into 'Property value' which already
+held that"*. On that format the ordering comes out right and stays put across repeats:
+
+| action | debug form | judge form |
+|---|---|---|
+| fills the field | 0.49 | **0.83** |
+| redundant retype | 0.40 | **0.07** |
+| the zero-point filter | 0.71 | **0.85** |
+| applies the filter | 0.46 | **0.78** |
+| paging | 0.73 | 0.71 |
+
+Measured at n=8 on the new format: mean **39%**, and the one failing run scored **11%** against
+29-50% for the runs that succeeded. **Target: ≥ 35%**, with the same n=25 as the pass rate. The
+earlier 70% figure came from the debugging format and does not describe the same measurement.
 
 ## Current targets
 
@@ -138,7 +159,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
-| efficiency | 70% (n=8) | **≥ 70%** | 25 |
+| efficiency | 39% (n=8) | **≥ 35%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.

@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 
@@ -42,6 +43,7 @@ class BrowseResult(BaseModel):
     summary: str = ""
     reason: str = ""
     steps: list[str] = []
+    narrative: list[str] = []
     decider: str = ""
     jev_calls: int = 0
     jev_tokens: int = 0
@@ -85,6 +87,7 @@ async def run_goal(
     history: list[str] = []
     fingerprints: list[str] = []
     targets: list[str] = []
+    narrated: list[str] = []
     waits = 0
     view_page = 0
     observation: Observation | None = None
@@ -139,6 +142,7 @@ async def run_goal(
                 # Paging counts as a step like any other, so a run that only ever asks for more
                 # is caught by the no-progress guard instead of paging until it runs out of steps.
                 targets.append("show_more")
+                narrated.append(f"{step}. asked to see more of the page than was being shown")
                 trace.step(step, state, observation, decision, entry.split("-> ", 1)[1])
                 if on_step is not None:
                     await on_step(step, entry)
@@ -148,10 +152,12 @@ async def run_goal(
             before_shot = await trace.shot(tab, step, "before")
             outcome = await _perform(tab, decision, observation, values, waits, helper, goal, history)
             targets.append(f"{decision.action}:{decision.target}")
-            if outcome != "download started" and (await tab.observe()).fingerprint() == fingerprints[-1]:
+            changed = outcome == "download started" or (await tab.observe()).fingerprint() != fingerprints[-1]
+            if not changed:
                 outcome += " (page unchanged)"
             entry = f"{step}. {_pending(decision, observation, values)} -> {outcome}"
             history.append(entry)
+            narrated.append(_narrate(step, decision, observation, values, outcome, changed))
             trace.step(
                 step,
                 state,
@@ -183,6 +189,7 @@ async def run_goal(
         summary=(observation.full_text or observation.text)[:_SUMMARY_CHARS],
         reason=reason,
         steps=history,
+        narrative=narrated,
         decider=decider.model,
         jev_calls=usage.calls,
         jev_tokens=usage.input_tokens,
@@ -232,6 +239,62 @@ def _no_progress(fingerprints: list[str], targets: list[str]) -> bool:
     if any(recent.count(t) >= _REPEAT_LIMIT for t in set(recent)):
         return True
     return len(fingerprints) > _REPEAT_LIMIT and len(set(fingerprints[-_REPEAT_LIMIT - 1 :])) == 1
+
+
+def _narrate(
+    step: int,
+    decision: Decision,
+    observation: Observation,
+    values: dict[str, str],
+    outcome: str,
+    changed: bool,
+) -> str:
+    """Say what was attempted and what it did, for a reader who was not there.
+
+    The step history doubles as the record a judge reads, and the debugging form misled it: it
+    showed a field's value *before* typing, which reads as the result, so a redundant retype looked
+    more successful than the action that actually filled the field. Element refs are dropped because
+    they are reassigned on every observation, so the same field carries a different number each
+    step and nothing signals it is the same field.
+    """
+    target = observation.find(decision.target) if decision.target is not None else None
+    field = f"'{target.name}'" if target and target.name else (target.kind if target else "the page")
+    where = " in the open dialog" if target and target.modal else ""
+    wanted = values.get(decision.value or "", "") or (decision.text or "")
+    had = (target.extra or "").replace("value=", "").strip("'") if target else ""
+
+    if decision.action in ("type", "submit", "compose"):
+        verb = (
+            "typed"
+            if decision.action == "type"
+            else ("typed and submitted" if decision.action == "submit" else "composed and typed")
+        )
+        already = (
+            " which already held that" if had and _same_value(had, wanted) else (f" which held {had!r}" if had else "")
+        )
+        what = f"{verb} {wanted!r} into {field}{where}{already}"
+    elif decision.action == "select":
+        what = f"chose {wanted!r} in {field}{where}"
+    elif decision.action == "click":
+        what = f"clicked {field}{where}"
+    elif decision.action == "press":
+        what = f"pressed {decision.key or 'Enter'}"
+    else:
+        what = decision.action.replace("_", " ")
+
+    plain = outcome.replace(" (page unchanged)", "")
+    effect = "it worked" if plain in ("clicked", "typed", "selected", "pressed") else plain
+    # "unchanged" is a fingerprint over the first 600 characters and 60 elements, so a filter set
+    # inside a dialog legitimately shows no change. Saying it plainly invites a reader to treat a
+    # correct action as a failure, so it is only worth mentioning when the action repeated itself.
+    repeated = not changed and decision.action in VALUE_ACTIONS and had and _same_value(had, wanted)
+    settled = ", and nothing about the page changed" if repeated else ""
+    return f"{step}. {what}; {effect}{settled}"
+
+
+def _same_value(actual: str, wanted: str) -> bool:
+    keep = re.compile(r"[^0-9a-zA-Z]")
+    return bool(actual) and keep.sub("", actual).lower() == keep.sub("", wanted).lower()
 
 
 def _pending(decision: Decision, observation: Observation, values: dict[str, str] | None = None) -> str:

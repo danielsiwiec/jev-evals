@@ -106,7 +106,7 @@ async def _drive(
         await host.close()
         if isinstance(decider, JevClient):
             await decider.close()
-    efficiency = await judge(goal, result.steps) if EFFICIENCY else None
+    efficiency = await judge(goal, result.narrative or result.steps) if EFFICIENCY else None
     return {
         "driver": label,
         "efficiency": efficiency.ratio if efficiency else None,
