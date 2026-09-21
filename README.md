@@ -42,6 +42,7 @@ to, and most were written after a bug caused by breaking them.
 | [eval-approach.md](specs/eval-approach.md) | that failures are reproduced before they are fixed, offline where possible, and that fixtures replicate a real page faithfully rather than the part we assume is the cause |
 | [decisions.md](specs/decisions.md) | choices that are easy to reverse by accident, with the evidence that produced them |
 | [known-failure-modes.md](specs/known-failure-modes.md) | the failures seen so far and the fixture covering each |
+| [targets.md](specs/targets.md) | what pass rate, cost and latency should be, and how many runs a claim about them needs before it means anything |
 | [bu-bench-handoff.md](specs/bu-bench-handoff.md) | how to rank Peregrine against other agents on an external benchmark, and why that stays separate from `evals/` |
 
 A change that contradicts a spec is a change to the spec: update it in the same commit and say what
