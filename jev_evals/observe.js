@@ -8,19 +8,25 @@
   const MODAL = "[role=dialog], dialog[open], [aria-modal=true]";
   const vw = window.innerWidth, vh = window.innerHeight;
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
-  const proxy = (el) => {
+  // A form control styled sr-only has no box of its own; the label is the thing a person
+  // sees and clicks, and clicking it is what the browser forwards to the control. The label
+  // is therefore observed and acted on directly, rather than the invisible input.
+  const standIn = (el) => {
     if (!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width > 1 && r.height > 1) return null;
     const lbl = (el.labels && el.labels[0]) || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`));
     if (!lbl) return null;
     const lr = lbl.getBoundingClientRect();
-    return lr.width > 1 && lr.height > 1 ? lr : null;
+    return lr.width > 1 && lr.height > 1 ? lbl : null;
   };
   const visible = (el) => {
     const st = getComputedStyle(el);
     if (st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     const r = el.getBoundingClientRect();
-    const box = (r.width > 1 && r.height > 1) ? r : proxy(el);
+    const stand = standIn(el);
+    const box = (r.width > 1 && r.height > 1) ? r : (stand ? stand.getBoundingClientRect() : null);
     return !!box && box.bottom > -vh && box.top < vh * 3;
   };
   const nameOf = (el) => {
@@ -83,12 +89,13 @@
     if (seen.has(el) || !visible(el)) continue;
     seen.add(el);
     const raw = el.getBoundingClientRect();
-    const r = (raw.width > 1 && raw.height > 1) ? raw : (proxy(el) || raw);
+    const stand = standIn(el);
+    const r = (raw.width > 1 && raw.height > 1) ? raw : (stand ? stand.getBoundingClientRect() : raw);
     const kind = kindOf(el);
     const name = nameOf(el);
     if (!name && kind === "link") continue;
     ref += 1;
-    el.setAttribute("data-synthia-ref", String(ref));
+    (stand || el).setAttribute("data-synthia-ref", String(ref));
     elements.push({
       ref, kind, name: name.slice(0, 120), extra: extraOf(el, kind),
       inViewport: r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw,

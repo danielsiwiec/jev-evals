@@ -11,12 +11,7 @@ from jev_evals.jev import jev_available
 
 DOWNLOADS = Path(os.getenv("DOWNLOADS_DIR", Path.home() / "Downloads"))
 START_URL = "https://freemagazines.top/?s=The+Economist+USA"
-OBJECTIVE = (
-    "Starting from the search results for The Economist USA, open the newest issue listed, then start "
-    "downloading its PDF file: get past any ad-block notice, cookie or 'continue' gates, follow the "
-    "download / view PDF link to the file-hosting page (it may open in a new tab), and press its Download "
-    "button until the file transfer actually begins."
-)
+OBJECTIVE = "Download the PDF of the newest issue of The Economist USA listed on this site."
 RUNS = int(os.getenv("EVAL_RUNS", "1"))
 FILE_WAIT_S = 120
 

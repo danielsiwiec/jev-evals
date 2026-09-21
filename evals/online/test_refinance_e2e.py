@@ -16,12 +16,8 @@ VALUES = {
     "zip code": ZIP,
 }
 OBJECTIVE = (
-    f"Find the best zero-point mortgage refinance rate on this page for a ${LOAN:,} loan on a ${PROPERTY:,} "
-    f"property, with a {FICO} credit score, in zip code {ZIP}. Dismiss any cookie or subscription gate, enter "
-    "those details in the rate search form and apply them, then filter the results to zero-point offers only "
-    "(the points filter, sometimes shown as 'Points' or 'All points options'). The goal is met when the results "
-    "table lists refinance offers whose points are 0 and you can read the lender name and rate of the "
-    "lowest-rate offer among them."
+    f"Find the best mortgage refinance rate with zero points for a ${LOAN:,} loan on a ${PROPERTY:,} "
+    f"property, with a {FICO} credit score, in zip code {ZIP}. Report the lender and the rate."
 )
 RUNS = int(os.getenv("EVAL_RUNS", "1"))
 

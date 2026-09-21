@@ -10,23 +10,37 @@ from typesafe_sdk import Choice, Noul
 ACTIONS: dict[str, str] = {
     "click": "click the target element (a link, button, checkbox, menu item, or an option)",
     "type": "type one of the available values into the target text field or search box",
+    "submit": "type one of the available values into the target field and press Enter to submit it",
     "select": "choose one of the available values in the target dropdown",
     "scroll_down": "scroll down because what is needed is probably further down the page",
     "scroll_up": "scroll up because what is needed is probably above",
     "back": "go back to the previous page because this page is a dead end",
+    "press": "press a single key such as Enter, Escape or Tab, on the target element if one is given",
+    "refresh": "reload the current page",
+    "show_more": "reveal the part of this page's elements, text or earlier actions that is being held back",
     "wait": "wait because the page is still loading or a challenge is clearing",
     "done": "the goal is already fully achieved on this page; nothing else to do",
     "blocked": "the goal cannot be achieved from here: login wall, captcha, error, or the content does not exist",
 }
-VALUE_ACTIONS = frozenset({"type", "select"})
-TARGET_ACTIONS = frozenset({"click", "type", "select"})
+VALUE_ACTIONS = frozenset({"type", "submit", "select"})
+TARGET_ACTIONS = frozenset({"click", "type", "submit", "select"})
 TYPEABLE_KINDS = frozenset({"textbox", "search", "email", "number", "password", "url", "tel", "date", "combobox"})
-TARGET_QUESTION = {"click": "click_target", "type": "type_target", "select": "select_target"}
+TARGET_QUESTION = {
+    "click": "click_target",
+    "type": "type_target",
+    "submit": "type_target",
+    "select": "select_target",
+    "press": "press_target",
+}
+KEYS = ("Enter", "Escape", "Tab", "ArrowDown", "ArrowUp")
 CRITERIA_STYLES = ("full", "names", "refs")
 _WORD = re.compile(r"[a-z0-9]{3,}")
 _SECRET = re.compile(r"pass|secret|token|key|pin|cvv|ssn", re.I)
 _VALUE_LEN = 120
 _TEXT_EXCERPT = 1800
+_TEXT_PAGE = 1800
+_ELEMENT_PAGE = 80
+_HISTORY_PAGE = 10
 _NAME_LEN = 80
 _HISTORY_WINDOW = 10
 _VALUE_FOR = "value_for_"
@@ -141,6 +155,21 @@ def _goal_words(goal: str) -> set[str]:
     return set(_WORD.findall(goal.lower()))
 
 
+def ranked_elements(elements: list[Element], goal: str) -> list[Element]:
+    """Most likely to matter first: in a dialog, then goal-word overlap, then on screen.
+
+    Pagination walks this order, so the first page holds what a blocking dialog puts in the way
+    even on a page with hundreds of controls.
+    """
+    words = _goal_words(goal)
+
+    def score(e: Element) -> tuple[int, int, int]:
+        overlap = len(words & _goal_words(f"{e.name} {e.extra}"))
+        return (1 if e.modal else 0, overlap, 1 if e.in_viewport else 0)
+
+    return sorted(elements, key=score, reverse=True)
+
+
 def prune(elements: list[Element], goal: str, limit: int) -> list[Element]:
     words = _goal_words(goal)
 
@@ -153,6 +182,16 @@ def prune(elements: list[Element], goal: str, limit: int) -> list[Element]:
     return sorted(kept, key=lambda e: e.ref)
 
 
+def _page_of(items: list[Any], page: int, size: int) -> tuple[list[Any], int]:
+    start = page * size
+    return items[start : start + size], max(len(items) - start - size, 0)
+
+
+def visible_elements(observation: "Observation", goal: str, page: int = 0) -> list["Element"]:
+    shown, _ = _page_of(ranked_elements(observation.elements, goal), page, _ELEMENT_PAGE)
+    return sorted(shown, key=lambda e: e.ref)
+
+
 def build_state(
     goal: str,
     values: dict[str, str],
@@ -160,10 +199,17 @@ def build_state(
     elements: list[Element],
     history: list[str],
     text_chars: int | None = None,
+    page: int = 0,
 ) -> dict[str, Any]:
-    text = observation.text[:text_chars] if text_chars else observation.text
+    """Nothing is silently withheld: whatever is not shown is counted, and `show_more` reveals it."""
+    size = text_chars or _TEXT_PAGE
+    text, text_left = _page_of(list(observation.full_text or observation.text), page, size)
+    text = "".join(text)
+    shown_elements, elements_left = _page_of(ranked_elements(elements, goal), page, _ELEMENT_PAGE)
+    shown_elements = sorted(shown_elements, key=lambda e: e.ref)
+    shown_history, history_left = _page_of(list(reversed(history)), page, _HISTORY_PAGE)
     page_text = text.lower()
-    return {
+    state: dict[str, Any] = {
         "goal": goal,
         "available_values": {name: _masked(name, value) for name, value in sorted(values.items())},
         "values_now_visible_in_page_text": sorted(name for name, value in values.items() if value.lower() in page_text),
@@ -174,9 +220,18 @@ def build_state(
             "scroll": observation.scroll,
             "text": text,
         },
-        "elements": [e.line() for e in elements],
-        "recent_actions": history[-_HISTORY_WINDOW:],
+        "elements": [e.line() for e in shown_elements],
+        "recent_actions": list(reversed(shown_history)),
     }
+    withheld = {
+        "page_text_characters": text_left,
+        "elements": elements_left,
+        "earlier_actions": history_left,
+    }
+    if any(withheld.values()):
+        state["not_shown"] = {k: v for k, v in withheld.items() if v}
+        state["not_shown"]["how_to_see_it"] = "choose show_more"
+    return state
 
 
 def _criterion(element: Element, style: str) -> Any:
@@ -224,6 +279,7 @@ def build_questions(values: dict[str, str], elements: list[Element], style: str 
         "click_target": ("clicked", [e for e in elements if e.clickable]),
         "type_target": ("typed into", [e for e in elements if e.typeable]),
         "select_target": ("used to choose an option", [e for e in elements if e.selectable]),
+        "press_target": ("the target of a keystroke", list(elements)),
     }
     for name, (verb, group) in groups.items():
         if group:
@@ -234,6 +290,10 @@ def build_questions(values: dict[str, str], elements: list[Element], style: str 
                 ),
                 criteria={str(e.ref): _criterion(e, style) for e in group},
             )
+    questions["key"] = Choice(
+        instructions="If a single key is to be pressed, which one?",
+        criteria=dict.fromkeys(KEYS),
+    )
     if values:
         questions["value"] = Choice(
             instructions=(
@@ -269,6 +329,7 @@ class Decision:
     action_probabilities: dict[str, float] = field(default_factory=dict)
     targets: dict[str, tuple[int, float]] = field(default_factory=dict)
     text: str | None = None
+    key: str | None = None
 
     def without(self, *actions: str) -> "Decision":
         remaining = {k: v for k, v in self.action_probabilities.items() if k not in actions}
@@ -288,6 +349,7 @@ class Decision:
             remaining,
             self.targets,
             self.text,
+            self.key,
         )
 
     def render(self) -> str:
@@ -302,6 +364,7 @@ class Decision:
 def parse_decision(answers: dict[str, Any]) -> Decision:
     action = answers["action"]
     value = answers.get("value")
+    key = answers.get("key")
     targets: dict[str, tuple[int, float]] = {}
     for name, question in TARGET_QUESTION.items():
         answer = answers.get(question)
@@ -315,6 +378,7 @@ def parse_decision(answers: dict[str, Any]) -> Decision:
             value = per_field
     return Decision(
         action=chosen,
+        key=str(key.choice) if key is not None else None,
         target=target,
         value=str(value.choice) if value is not None else None,
         action_confidence=float(getattr(action, "confidence", 0.0) or 0.0),

@@ -16,37 +16,14 @@ _OBSERVE_JS = (Path(__file__).parent / "observe.js").read_text()
 _NAV_TIMEOUT_MS = 30_000
 _ACTION_TIMEOUT_MS = 8_000
 _CLICK_TIMEOUT_MS = 2_000
-_LABEL_PROXY_JS = """el => {
-  const r = el.getBoundingClientRect();
-  if (r.width > 1 && r.height > 1) return false;
-  const lbl = (el.labels && el.labels[0])
-    || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`));
-  if (!lbl) return false;
-  const lr = lbl.getBoundingClientRect();
-  if (!(lr.width > 1 && lr.height > 1)) return false;
-  for (const old of document.querySelectorAll('[data-synthia-proxy]')) {
-    old.removeAttribute('data-synthia-proxy');
-  }
-  lbl.setAttribute('data-synthia-proxy', '1');
-  lbl.scrollIntoView({block: 'center', inline: 'center'});
-  return true;
-}"""
+
 _SETTLE_MS = 800
 _OBSERVE_TIMEOUT_S = 15.0
 _EVAL_TIMEOUT_S = 30.0
-_SCROLL_FRACTION = 0.8
+_SCROLL_FRACTION = 1.0
 _DOWNLOAD_ERROR = re.compile(r"Download is starting", re.I)
 
 
-_ENTER_SUBMITS_JS = """el => {
-  const form = el.closest('form');
-  const type = (el.getAttribute('type') || '').toLowerCase();
-  const role = (el.getAttribute('role') || '').toLowerCase();
-  if (type === 'search' || role === 'searchbox') return true;
-  if (!form) return false;
-  const selector = 'input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select';
-  return form.querySelectorAll(selector).length <= 1;
-}"""
 _COMMIT_VALUE_JS = """el => {
   el.dispatchEvent(new Event('change', {bubbles: true}));
   el.blur();
@@ -162,12 +139,11 @@ class Tab:
             page.on("dialog", self._on_dialog)
 
     async def _on_dialog(self, dialog: Any) -> None:
+        # A native dialog blocks the page until it is handled, so it cannot be left open.
+        # It is dismissed and reported verbatim; jev decides what to do about it next.
         self._dialogs.append(f"{dialog.type}: {dialog.message[:120]}")
         try:
-            if dialog.type == "beforeunload":
-                await dialog.accept()
-            else:
-                await dialog.dismiss()
+            await dialog.dismiss()
         except Exception:
             pass
 
@@ -244,17 +220,13 @@ class Tab:
         page = await self.ensure()
         try:
             raw = await asyncio.wait_for(page.evaluate(_OBSERVE_JS), timeout_s)
-        except TimeoutError:
-            logger.warning(f"observation timed out after {timeout_s:.0f}s; page main thread is busy: {page.url[:80]}")
-            return Observation.from_raw(_busy_observation(page.url, timeout_s))
+        except TimeoutError as error:
+            raise PlaywrightError(f"the page did not respond to observation within {timeout_s:.0f}s") from error
         except PlaywrightError as error:
             if "Execution context was destroyed" not in str(error) and "navigation" not in str(error).lower():
                 raise
             await self.settle(_NAV_TIMEOUT_MS)
-            try:
-                raw = await asyncio.wait_for(page.evaluate(_OBSERVE_JS), timeout_s)
-            except TimeoutError:
-                return Observation.from_raw(_busy_observation(page.url, timeout_s))
+            raw = await asyncio.wait_for(page.evaluate(_OBSERVE_JS), timeout_s)
         return Observation.from_raw(raw)
 
     async def evaluate(self, script: str, timeout_s: float = _EVAL_TIMEOUT_S) -> Any:
@@ -273,16 +245,13 @@ class Tab:
     async def click(self, ref: int) -> str:
         page = await self.ensure()
         before = await self._siblings()
-        url_before = page.url
         locator = self._locator(ref)
-        href = await self._link_target(locator)
-        target = await self._clickable(locator)
         try:
-            await target.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
+            await locator.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
         except PlaywrightError:
             pass
         try:
-            await target.click(timeout=_CLICK_TIMEOUT_MS)
+            await locator.click(timeout=_CLICK_TIMEOUT_MS)
         except PlaywrightError as error:
             if _DOWNLOAD_ERROR.search(str(error)):
                 return "download started"
@@ -295,45 +264,7 @@ class Tab:
         except PlaywrightError:
             pass
         await self.settle()
-        outcome = await self._outcome(before, "clicked")
-        if outcome == "clicked" and href and self.page is page and not await self._url_changed(page, url_before):
-            followed = await self.open(href)
-            return (
-                "download started"
-                if followed == "download started"
-                else "clicked (link did not navigate; opened its target directly)"
-            )
-        return outcome
-
-    async def _clickable(self, locator: Any) -> Any:
-        assert self._page is not None
-        try:
-            proxied = await locator.evaluate(_LABEL_PROXY_JS, timeout=_ACTION_TIMEOUT_MS)
-        except PlaywrightError:
-            return locator
-        if not proxied:
-            return locator
-        return self._page.locator("[data-synthia-proxy='1']").first
-
-    async def _url_changed(self, page: Page, url_before: str, grace_s: float = 1.5) -> bool:
-        deadline = asyncio.get_event_loop().time() + grace_s
-        while _without_fragment(page.url) == _without_fragment(url_before):
-            if asyncio.get_event_loop().time() >= deadline:
-                return False
-            await asyncio.sleep(0.1)
-        return True
-
-    async def _link_target(self, locator: Any) -> str:
-        try:
-            href = await locator.evaluate("el => (el.closest('a[href]') || {}).href || ''", timeout=_ACTION_TIMEOUT_MS)
-        except PlaywrightError:
-            return ""
-        href = str(href or "")
-        if not href.startswith(("http://", "https://")) or href.split("#", 1)[0] == (
-            self.page.url.split("#", 1)[0] if self.page else ""
-        ):
-            return ""
-        return href
+        return await self._outcome(before, "clicked")
 
     async def type(self, ref: int, value: str, submit: bool = False) -> str:
         await self.ensure()
@@ -341,7 +272,7 @@ class Tab:
         locator = self._locator(ref)
         try:
             await locator.fill(value, timeout=_CLICK_TIMEOUT_MS)
-            if submit and await self._enter_submits(locator):
+            if submit:
                 await locator.press("Enter")
             else:
                 await locator.evaluate(_COMMIT_VALUE_JS)
@@ -356,12 +287,6 @@ class Tab:
         if kept is not None and not _same_value(kept, value):
             outcome += f" (the field now reads '{kept[:40]}')"
         return outcome
-
-    async def _enter_submits(self, locator: Any) -> bool:
-        try:
-            return bool(await locator.evaluate(_ENTER_SUBMITS_JS, timeout=_ACTION_TIMEOUT_MS))
-        except PlaywrightError:
-            return False
 
     async def _current_value(self, locator: Any) -> str | None:
         try:
@@ -400,6 +325,16 @@ class Tab:
         await page.evaluate(f"window.scrollBy(0, {direction} * window.innerHeight * {_SCROLL_FRACTION})")
         await asyncio.sleep(0.3)
         return "scrolled"
+
+    async def refresh(self) -> str:
+        page = await self.ensure()
+        before = await self._siblings()
+        try:
+            await page.reload(wait_until="domcontentloaded")
+        except PlaywrightError as error:
+            return f"refresh failed: {_short(error)}"
+        await self.settle()
+        return await self._outcome(before, "reloaded")
 
     async def back(self) -> str:
         page = await self.ensure()
@@ -451,17 +386,6 @@ async def _bring_to_front(page: Page) -> None:
         await page.bring_to_front()
     except PlaywrightError:
         pass
-
-
-def _busy_observation(url: str, timeout_s: float) -> dict[str, Any]:
-    return {
-        "url": url,
-        "title": "",
-        "text": f"(the page is busy and did not respond within {timeout_s:.0f}s; it may be preparing a download)",
-        "alerts": ["page busy"],
-        "scroll": {},
-        "elements": [],
-    }
 
 
 def _intercepted_by(message: str) -> str:
