@@ -17,6 +17,9 @@ were written after a bug caused by breaking them:
   evidence behind them. Check here before reversing one.
 - **[specs/known-failure-modes.md](specs/known-failure-modes.md)** — what goes wrong and which fixture
   covers it.
+- **[specs/bu-bench-handoff.md](specs/bu-bench-handoff.md)** — running Peregrine against
+  browser-use's BU Bench to compare it with other agents. External and judge-scored, so it is
+  reported separately from `evals/`.
 
 Quick orientation, with the detail in the specs:
 
