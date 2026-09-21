@@ -19,6 +19,15 @@ _ACTION_TIMEOUT_MS = 8_000
 _CLICK_TIMEOUT_MS = 2_000
 
 _SETTLE_MS = 800
+_PULSE_S = 0.05
+# Cheap signature of "has anything changed": document size, element count, url, and whether
+# the browser still considers the document to be loading.
+_DOM_PULSE_JS = """() => [
+  document.readyState,
+  location.href,
+  document.getElementsByTagName('*').length,
+  (document.body && document.body.innerHTML.length) || 0,
+].join('|')"""
 _OBSERVE_TIMEOUT_S = 15.0
 _EVAL_TIMEOUT_S = 30.0
 _SCROLL_FRACTION = 1.0
@@ -218,12 +227,28 @@ class Tab:
         return "download started" if self.take_download() else "opened"
 
     async def settle(self, timeout_ms: int = _SETTLE_MS) -> None:
+        """Return as soon as the page stops changing, rather than after a fixed wait.
+
+        A blind sleep is wrong in both directions: too long for a page that did nothing, too short
+        for one still working. This watches the DOM and returns on the first quiet interval, so a
+        static page costs a few milliseconds and a busy one gets the time it needs.
+        """
         page = await self.ensure()
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
         except PlaywrightError:
             pass
-        await asyncio.sleep(timeout_ms / 1000 / 2)
+        deadline = asyncio.get_event_loop().time() + timeout_ms / 1000
+        previous = None
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                current = await page.evaluate(_DOM_PULSE_JS)
+            except PlaywrightError:
+                return
+            if current == previous:
+                return
+            previous = current
+            await asyncio.sleep(_PULSE_S)
 
     async def observe(self, timeout_s: float = _OBSERVE_TIMEOUT_S) -> Observation:
         page = await self.ensure()

@@ -53,6 +53,29 @@ it on the first step and returns to the answer, three runs out of three. Removin
 action space makes the same eval fail with jev calling `back` three times and getting nowhere, which
 is what the action was added to fix.
 
+## settle() waits for quiet, not for a fixed time
+
+After every action the harness waits for the page to stop changing before observing again, because
+the loop compares observations to decide whether anything happened. That wait used to be a hardcoded
+400ms sleep, which was simultaneously too long for a static page and too short for a slow one.
+
+It now polls a cheap DOM signature — readyState, url, element count, body length — every 50ms and
+returns on the first unchanged reading, with the old 800ms as a ceiling. Measured: 402ms to 54ms per
+call, the offline suite from 74s to 46s, and refinance runs from ~8.9s to 5.6-7.8s.
+
+This was worth finding before any rewrite: a profile showed 87% of a click's 462ms was that sleep and
+only 7% was Playwright, which is why raw CDP was not the answer to slowness. See
+[performance](#performance-where-the-time-actually-goes) below.
+
+## Performance: where the time actually goes
+
+Measured on a real page, per operation: Playwright `page.evaluate` 1.5ms against raw CDP
+`Runtime.evaluate` 0.7ms; a bare `locator.click()` 34.6ms against a raw CDP mouse dispatch 2.8ms.
+Playwright's overhead is real but small next to model latency (~194ms per step) and next to anything
+the harness spends waiting. Rewriting the transport in raw CDP would target roughly 4% of a run while
+requiring us to rebuild tab adoption, dialog handling, downloads and navigation waits — all of which
+are load-bearing for the evals. Playwright stays.
+
 ## Known-failing evals are kept failing
 
 `test_jev_saves_the_file_once_the_host_becomes_ready` reproduces premature done: jev clicks before an
