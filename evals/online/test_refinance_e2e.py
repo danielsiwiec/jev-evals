@@ -52,14 +52,14 @@ def score(text: str, url: str, expected: Offer) -> dict:
 async def test_best_zero_point_refinance_rate() -> None:
     expected = truth()
     print(f"\nground truth: {expected.lender} @ {expected.rate}% (APR {expected.apr}, {expected.points} points)")
+    # Every run is independent and owns its own browser, so runs and drivers fan out together.
+    jobs = [(name, _job(name)) for _ in range(RUNS) for name in selected()]
     rows = []
-    for index in range(1, RUNS + 1):
-        jobs = [(name, _job(name)) for name in selected()]
-        for row in await gather(jobs):
-            row["run"] = index
-            row.update(score(row["summary"], row["url"], expected))
-            rows.append(row)
-            print(render([row], "", _COLUMNS).splitlines()[3], flush=True)
+    for index, row in enumerate(await gather(jobs)):
+        row["run"] = index // max(len(selected()), 1) + 1
+        row.update(score(row["summary"], row["url"], expected))
+        rows.append(row)
+        print(render([row], "", _COLUMNS).splitlines()[3], flush=True)
     print(render(rows, f"runs={RUNS} loan={LOAN} value={PROPERTY} fico={FICO} zip={ZIP}", _COLUMNS))
     assert any(r["found"] for r in rows), f"no run reported {expected.lender} at {expected.rate}%"
 

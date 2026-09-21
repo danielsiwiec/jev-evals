@@ -18,7 +18,7 @@ from peregrine.page import HostBrowser, Tab
 CDP = os.getenv("BROWSER_CDP_HTTP", "http://localhost:9222")
 MAX_STEPS = int(os.getenv("EVAL_MAX_STEPS", "40"))
 TIMEOUT_S = float(os.getenv("EVAL_TIMEOUT_S", "300"))
-PARALLEL = os.getenv("EVAL_PARALLEL", "0").lower() in ("1", "true", "yes")
+PARALLEL = int(os.getenv("EVAL_PARALLEL", "1"))
 FRESH_PROFILE = os.getenv("EVAL_FRESH_PROFILE", "1").lower() in ("1", "true", "yes")
 CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 _CHROME_START_S = 20.0
@@ -144,14 +144,26 @@ DRIVERS = {
 }
 
 
-async def gather(jobs: list[tuple[str, Any]], parallel: bool = PARALLEL) -> list[dict[str, Any]]:
-    if not parallel:
+async def gather(jobs: list[tuple[str, Any]], parallel: int = PARALLEL) -> list[dict[str, Any]]:
+    """Run jobs with at most `parallel` in flight.
+
+    Each job owns a throwaway Chrome, so concurrency is bounded by the machine rather than by
+    anything shared. One at a time is the honest default for comparing drivers; a large batch of
+    one driver is where concurrency pays.
+    """
+    if parallel <= 1:
         rows = []
         for _, job in jobs:
             rows.append(await job())
             await asyncio.sleep(2)
         return rows
-    return list(await asyncio.gather(*(job() for _, job in jobs)))
+    limit = asyncio.Semaphore(parallel)
+
+    async def run(job):
+        async with limit:
+            return await job()
+
+    return list(await asyncio.gather(*(run(job) for _, job in jobs)))
 
 
 def selected() -> list[str]:

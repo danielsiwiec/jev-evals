@@ -63,19 +63,46 @@ Quoting a mean here is misleading, and pinning one is expensive — ±20% of the
 - **Target: median ≤ 10s, p90 ≤ 45s**, at n≥25 (the same batch that supports the pass-rate claim).
 - A regression in p90 with a steady median means a new failure mode in the tail, not a slowdown.
 
+## Running a batch big enough to matter
+
+Runs are independent and each owns a throwaway Chrome, so they fan out. `EVAL_PARALLEL=n` puts at
+most n in flight:
+
+```bash
+EVAL_PARALLEL=5 EVAL_RUNS=25 EVAL_DRIVERS=jev EVAL=evals/online/test_refinance_e2e.py make e2e
+```
+
+That is about 70 seconds for n=25 against roughly 5 minutes serial, which is what makes a
+statistically meaningful batch a routine thing to run rather than an event. Keep concurrency at or
+below 5: each run is a full Chrome, and the sites are shared.
+
+Comparative runs (driver against driver) should stay serial. Concurrency adds contention that is not
+part of what is being compared.
+
+**Headed runs cannot be hidden on macOS.** Every off-screen `--window-position`, positive or
+negative, is clamped back to the top-left of the desktop — measured at `0, 33` for `-2400,0`,
+`5000,0` and `-3000,-3000` alike. A headed run puts windows on the screen, full stop. Headless is the
+default and costs nothing: at n=25 both scored 22/25, with medians of 8.0s and 8.6s. Use
+`EVAL_HEADLESS=0` only when you intend to watch, and expect windows. For a headed run on a machine
+you are using, a separate desktop Space is the only thing that actually works.
+
 ## Current targets
 
 Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current harness (n=18):
 
 | metric | observed | target | n for the claim |
 |---|---|---|---|
-| pass rate (`found`) | 77.8% [52.4–93.6] | **≥ 75%** | 25 |
-| cost per run | $0.0033 | **≤ $0.005** | 10 |
-| latency median | 8.4s | **≤ 10s** | 25 |
-| latency p90 | 40.3s | **≤ 45s** | 25 |
+| pass rate (`found`) | 88.0% [68.8–97.5] | **≥ 75%** | 25 |
+| cost per run | $0.0029 | **≤ $0.005** | 10 |
+| latency median | 8.0s | **≤ 10s** | 25 |
+| latency p90 | 17.2s | **≤ 45s** | 25 |
 
-These are floors to defend, not ceilings to celebrate. They were set from 18 runs, which supports the
-cost target and only weakly supports the pass-rate one; the first n=25 batch should replace them.
+Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
+headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.
+
+These are floors to defend, not ceilings to celebrate. The p90 target of 45s was set from an n=18
+sample whose tail reached 40s; at n=25 the p90 is 17.2s, so that target is now loose and should be
+tightened once another batch confirms it.
 
 ## Rules
 

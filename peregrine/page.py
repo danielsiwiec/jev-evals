@@ -476,8 +476,15 @@ async def _safe_title(page: Page) -> str:
         return ""
 
 
+def _may_take_focus() -> bool:
+    """Raising a window is only ever useful to a person watching it, and only when one run owns
+    the screen. Headless has no window, parallel runs would fight over it, and a headed run parked
+    off-screen is deliberately out of the way."""
+    return os.getenv("BROWSER_ALLOW_FOCUS", "0").lower() in ("1", "true", "yes")
+
+
 async def _bring_to_front(page: Page) -> None:
-    if os.getenv("EVAL_PARALLEL", "0").lower() in ("1", "true", "yes"):
+    if not _may_take_focus():
         return
     try:
         await page.bring_to_front()

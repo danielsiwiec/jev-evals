@@ -14,7 +14,7 @@ from peregrine.page import HostBrowser, Tab
 CHROME = os.getenv("CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 HEADLESS = os.getenv("EVAL_HEADLESS", "1").lower() in ("1", "true", "yes")
 WINDOW = os.getenv("EVAL_WINDOW", "1440,900")
-OFFSCREEN = os.getenv("EVAL_WINDOW_POSITION", "-2400,0")
+OFFSCREEN = os.getenv("EVAL_WINDOW_POSITION", "0,0")
 _START_S = 20.0
 
 
@@ -41,10 +41,14 @@ async def fresh_chrome(headless: bool = HEADLESS):
     if headless:
         flags.append("--headless=new")
     else:
-        # Keep a headed window off the active desktop so it cannot steal focus.
+        # A headed window cannot be hidden on macOS: every off-screen --window-position, positive
+        # or negative, is clamped back to the top-left of the desktop. Occlusion detection is
+        # disabled so a covered window is not throttled, and the window is placed where it was
+        # asked to go, but a headed run WILL put windows on the screen. Use EVAL_HEADLESS=1 (the
+        # default) to keep the screen free.
         flags += [
-            "--window-position=-2400,0",
-            "--no-startup-window" if False else "--disable-features=CalculateNativeWinOcclusion",
+            f"--window-position={OFFSCREEN}",
+            "--disable-features=CalculateNativeWinOcclusion",
         ]
     process = await asyncio.create_subprocess_exec(
         CHROME,
