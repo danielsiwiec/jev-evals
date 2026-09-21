@@ -131,6 +131,13 @@ Every call is attributed: `BrowseResult.text_model`, `.text_calls`, `.text_mean_
 added to the run's own. Without that, a two-model run cannot be told apart from a one-model run in
 the results.
 
+The two modes have to be genuinely distinguishable, not decided by a coin flip. On the signup form
+the first wording left `type` at 0.49 against `compose` at 0.45, and the span it would have typed was
+"a contact email address" — the goal's words, in an email field. Naming the distinction in both
+action descriptions moved that to 0.07 against 0.88, while a search box still prefers `type` at 0.72.
+An eval asserts both probabilities rather than just the choice, because a narrow margin regresses
+without anything failing.
+
 Eight refinance runs with composing available found the answer in six; eight with it disabled found
 seven. The one four-run batch that scored 2/4 was over-continuation and a paging loop, both present
 before this change. Composing is never chosen on that eval, which is the expected result: every value

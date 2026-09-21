@@ -9,10 +9,11 @@ from typesafe_sdk import Choice, Noul
 
 ACTIONS: dict[str, str] = {
     "click": "click the target element (a link, button, checkbox, menu item, or an option)",
-    "type": "type one of the available values into the target text field or search box",
+    "type": "type into the target field a value that is already known: one of the available values, "
+    "or words taken verbatim from the goal such as search terms",
     "submit": "type one of the available values into the target field and press Enter to submit it",
-    "compose": "work out the right text for the target field and type it, when the goal does not "
-    "contain the words to use verbatim",
+    "compose": "work out the right text for the target field and type it, for a value the goal does "
+    "not state verbatim such as an email address, a name or a date",
     "select": "choose one of the available values in the target dropdown",
     "scroll_down": "scroll down because what is needed is probably further down the page",
     "scroll_up": "scroll up because what is needed is probably above",
@@ -319,8 +320,9 @@ def build_questions(
             questions["text_to_type"] = Choice(
                 instructions=(
                     "If text must be typed and none of `available_values` fits, which of these phrases "
-                    "from the goal should be typed into the chosen field? Pick the one a person would "
-                    "enter to make progress, for example the terms they would put in a search box."
+                    "from the goal should be typed into the chosen field? These are spans of the goal, "
+                    "so they suit a search box or a field the goal names outright. They do not suit a "
+                    "field needing a value the goal never states, such as an email address."
                 ),
                 criteria=dict.fromkeys(phrases),
             )

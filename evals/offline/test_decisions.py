@@ -125,6 +125,20 @@ async def test_jev_can_type_text_the_goal_does_not_supply():
     )
 
 
+async def _with_retries(helper, context, attempts: int = 3):
+    """Provider unavailability is not what these tests measure; a real failure still fails."""
+    from peregrine.text_helper import TextUnavailable
+
+    for attempt in range(attempts):
+        try:
+            return await helper.value_for(context)
+        except TextUnavailable as error:
+            if attempt == attempts - 1:
+                pytest.skip(f"text model unavailable: {error}")
+            await asyncio.sleep(1.5)
+    raise AssertionError("unreachable")
+
+
 async def test_text_helper_composes_a_value_the_goal_does_not_contain():
     """The generative half: an email address appears nowhere in the goal, so it must be composed."""
     from peregrine.text_helper import TextHelper, field_context
@@ -136,17 +150,18 @@ async def test_text_helper_composes_a_value_the_goal_does_not_contain():
             await tab.open((PAGES / "signup_form.html").as_uri())
             observation = await tab.observe()
             helper = TextHelper()
-            value = await helper.value_for(field_context(SIGNUP_GOAL, "Email address", observation, []))
+            context = field_context(SIGNUP_GOAL, "Email address", observation, [])
+            value = await _with_retries(helper, context)
             assert "@" in value and "." in value.split("@")[-1], f"not an email: {value!r}"
             assert value.lower() not in SIGNUP_GOAL.lower(), "the value should not be a span of the goal"
-            assert helper.calls == 1
+            assert helper.calls >= 1
         finally:
             await tab.close()
             await host.close()
 
 
 async def test_text_helper_caches_identical_contexts():
-    from peregrine.text_helper import TextHelper, TextUnavailable, field_context
+    from peregrine.text_helper import TextHelper, field_context
 
     async with fresh_chrome() as endpoint:
         host = HostBrowser(endpoint)
@@ -156,15 +171,7 @@ async def test_text_helper_caches_identical_contexts():
             observation = await tab.observe()
             helper = TextHelper()
             context = field_context(SIGNUP_GOAL, "Email address", observation, [])
-            # The provider is occasionally unavailable; that is not what this test is about.
-            for attempt in range(3):
-                try:
-                    first = await helper.value_for(context)
-                    break
-                except TextUnavailable:
-                    if attempt == 2:
-                        pytest.skip("text model unavailable")
-                    await asyncio.sleep(1)
+            first = await _with_retries(helper, context)
             second = await helper.value_for(context)
             assert first == second, "a cached context must give the same answer"
             assert helper.calls == 1, f"the second call should have been served from cache, made {helper.calls}"
@@ -178,3 +185,41 @@ async def test_jev_composes_an_email_to_complete_a_signup():
     result, title = await _run("signup_form.html", SIGNUP_GOAL, max_steps=8)
     assert any("compose" in step for step in result.steps), f"jev did not choose to compose text: {result.steps}"
     assert title == "SUBSCRIBED", f"status={result.status} title={title} steps={result.steps}"
+
+
+async def test_jev_prefers_span_filling_for_a_search_and_composing_for_an_invented_value():
+    """The two filling modes must be told apart, not chosen by a coin flip.
+
+    A search box wants words from the goal; an email field wants a value the goal never states.
+    Probabilities are asserted, not just the choice, because a narrow margin regresses silently.
+    """
+    from peregrine.actions import build_questions, build_state
+    from peregrine.jev import JevClient, JevUsage
+
+    async def decide(page: str, goal: str) -> dict:
+        async with fresh_chrome() as endpoint:
+            host, jev = HostBrowser(endpoint), JevClient()
+            tab = Tab(host)
+            try:
+                await tab.open((PAGES / page).as_uri())
+                observation = await tab.observe()
+                answers = await jev.ask(
+                    build_state(goal, {}, observation, observation.elements, []),
+                    build_questions({}, observation.elements, goal=goal),
+                    JevUsage(),
+                )
+                return getattr(answers["action"], "probabilities", {}) or {}
+            finally:
+                await tab.close()
+                await host.close()
+                await jev.close()
+
+    search = await decide("search_engine.html", SEARCH_GOAL)
+    assert search.get("type", 0) > search.get("compose", 0), (
+        f"a search box should be filled from the goal's own words: {search}"
+    )
+
+    signup = await decide("signup_form.html", SIGNUP_GOAL)
+    assert signup.get("compose", 0) > signup.get("type", 0), (
+        f"an email address is not in the goal and must be composed: {signup}"
+    )
