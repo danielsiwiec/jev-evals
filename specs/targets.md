@@ -145,9 +145,23 @@ held that"*. On that format the ordering comes out right and stays put across re
 | applies the filter | 0.46 | **0.78** |
 | paging | 0.73 | 0.71 |
 
-Measured at n=8 on the new format: mean **39%**, and the one failing run scored **11%** against
-29-50% for the runs that succeeded. **Target: ≥ 35%**, with the same n=25 as the pass rate. The
+**The report says what the browser did, never whether it was right.** An early version ended each
+action with "it worked", which asserts success the harness cannot know: a value typed into the wrong
+field was carried out and still wasted. It measurably over-credited -- clicking through to a
+lender's offer page scored 0.78 with it and 0.21-0.48 without. Actions now end with the mechanical
+fact: "the click landed", "the text went in". The judge is told explicitly that being carried out is
+not the same as being useful.
+
+The state also carries the step where the run came closest to believing it was finished. An absolute
+threshold was tried first and marked nothing: jev's `goal_met` peaked at 0.46 on a run that found the
+answer, so no fixed cut fires. The peak is used instead, since work after it is suspect.
+
+Measured at n=8 on this format: mean **37%**, with both failing runs at **10-11%** and every
+successful one between 40% and 55%. **Target: ≥ 35%**, with the same n=25 as the pass rate. The
 earlier 70% figure came from the debugging format and does not describe the same measurement.
+
+Per-action verdicts are written to the run's trace as an `efficiency` record, because a low score
+without them says something is wrong and not what.
 
 ## Current targets
 
@@ -159,7 +173,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
-| efficiency | 39% (n=8) | **≥ 35%** | 25 |
+| efficiency | 37% (n=8) | **≥ 35%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.

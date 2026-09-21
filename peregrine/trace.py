@@ -78,3 +78,21 @@ class Trace:
 
     def finish(self, status: str, reason: str) -> None:
         self._write({"kind": "end", "status": status, "reason": reason})
+
+    def efficiency(self, goal: str, verdicts: list[tuple[str, float]], threshold: float) -> None:
+        """Keep the judge's reasoning, not just its total.
+
+        The per-action verdicts are the diagnostic half of efficiency: the score says how much was
+        wasted, and these say which actions it was. Without them a low score is unactionable.
+        """
+        self._write(
+            {
+                "kind": "efficiency",
+                "goal": goal,
+                "threshold": threshold,
+                "actions": [
+                    {"action": action, "score": round(score, 3), "contributed": score >= threshold}
+                    for action, score in verdicts
+                ],
+            }
+        )

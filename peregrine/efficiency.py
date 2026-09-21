@@ -44,7 +44,7 @@ def _label(step: str) -> str:
     return match.group(1) if match else step[:12]
 
 
-async def judge(goal: str, steps: list[str], jev: JevClient | None = None) -> Efficiency:
+async def judge(goal: str, steps: list[str], jev: JevClient | None = None, reached_at: int = 0) -> Efficiency:
     """Ask jev, once, which of these actions contributed.
 
     Every action is judged against the whole trace rather than in isolation, because contribution is

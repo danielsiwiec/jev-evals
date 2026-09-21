@@ -44,6 +44,7 @@ class BrowseResult(BaseModel):
     reason: str = ""
     steps: list[str] = []
     narrative: list[str] = []
+    goal_reached_at: int = 0
     decider: str = ""
     jev_calls: int = 0
     jev_tokens: int = 0
@@ -88,6 +89,7 @@ async def run_goal(
     fingerprints: list[str] = []
     targets: list[str] = []
     narrated: list[str] = []
+    history_met: list[float] = []
     waits = 0
     view_page = 0
     observation: Observation | None = None
@@ -157,6 +159,7 @@ async def run_goal(
                 outcome += " (page unchanged)"
             entry = f"{step}. {_pending(decision, observation, values)} -> {outcome}"
             history.append(entry)
+            history_met.append(decision.goal_met)
             narrated.append(_narrate(step, decision, observation, values, outcome, changed))
             trace.step(
                 step,
@@ -190,6 +193,7 @@ async def run_goal(
         reason=reason,
         steps=history,
         narrative=narrated,
+        goal_reached_at=_first_met(history_met),
         decider=decider.model,
         jev_calls=usage.calls,
         jev_tokens=usage.input_tokens,
@@ -241,6 +245,18 @@ def _no_progress(fingerprints: list[str], targets: list[str]) -> bool:
     return len(fingerprints) > _REPEAT_LIMIT and len(set(fingerprints[-_REPEAT_LIMIT - 1 :])) == 1
 
 
+def _first_met(scores: list[float]) -> int:
+    """The step where the run's own sense of completion peaked.
+
+    jev's goal_met stays low even on a run that succeeds -- it peaked at 0.46 on a run that found
+    the answer -- so an absolute threshold marks nothing. The peak is still informative: it is where
+    the run came closest to believing it was finished, and work after it is suspect.
+    """
+    if not scores or max(scores) < 0.2:
+        return 0
+    return scores.index(max(scores)) + 1
+
+
 def _narrate(
     step: int,
     decision: Decision,
@@ -282,8 +298,16 @@ def _narrate(
     else:
         what = decision.action.replace("_", " ")
 
+    # The harness knows only that the mechanical action did not error, never that it was the right
+    # action. Saying "it worked" asserts the second, and invites a reader to approve of a value put
+    # in the wrong field. The neutral report is what the browser did.
     plain = outcome.replace(" (page unchanged)", "")
-    effect = "it worked" if plain in ("clicked", "typed", "selected", "pressed") else plain
+    effect = {
+        "clicked": "the click landed",
+        "typed": "the text went in",
+        "selected": "the option was chosen",
+        "pressed": "the key was sent",
+    }.get(plain, plain)
     # "unchanged" is a fingerprint over the first 600 characters and 60 elements, so a filter set
     # inside a dialog legitimately shows no change. Saying it plainly invites a reader to treat a
     # correct action as a failure, so it is only worth mentioning when the action repeated itself.

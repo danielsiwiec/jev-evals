@@ -5,6 +5,7 @@ import shutil
 import socket
 import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -106,7 +107,11 @@ async def _drive(
         await host.close()
         if isinstance(decider, JevClient):
             await decider.close()
-    efficiency = await judge(goal, result.narrative or result.steps) if EFFICIENCY else None
+    efficiency = (
+        await judge(goal, result.narrative or result.steps, reached_at=result.goal_reached_at) if EFFICIENCY else None
+    )
+    if efficiency is not None and result.trace_path:
+        _append_efficiency(result.trace_path, goal, efficiency)
     return {
         "driver": label,
         "efficiency": efficiency.ratio if efficiency else None,
@@ -148,6 +153,16 @@ DRIVERS = {
     "gemini": llm_driver(GEMINI_MODEL),
     "luna": llm_driver(LUNA_MODEL),
 }
+
+
+def _append_efficiency(trace_path: str, goal: str, efficiency) -> None:
+    from peregrine.efficiency import CONTRIBUTED
+    from peregrine.trace import Trace
+
+    trace = Trace.__new__(Trace)
+    trace.path = Path(trace_path)
+    trace.shots = None
+    trace.efficiency(goal, efficiency.verdicts, CONTRIBUTED)
 
 
 async def gather(jobs: list[tuple[str, Any]], parallel: int = PARALLEL) -> list[dict[str, Any]]:
