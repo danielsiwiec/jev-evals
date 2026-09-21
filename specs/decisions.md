@@ -112,6 +112,30 @@ That is enough to search, and not enough to invent a plausible email address for
 `Decision.text` already existed and was already parsed by the LLM decider, but `_perform` never read
 it — free text was unreachable for every driver, including gemini and luna.
 
+## Two ways to fill a field, and jev picks which
+
+`type` and `submit` use a prepared value or a phrase selected from the goal. `compose` calls a
+generative model for a value the goal does not contain — an email address, a date, a plausible name.
+jev chooses between them like any other action; the harness never decides that a field needs
+composing.
+
+The helper is deliberately narrow ([text_helper.py](../peregrine/text_helper.py)). It is told which
+field, and returns one string. It never sees the action list, never picks an element, never decides
+whether to type. Identical contexts are cached, so a retry after a stale page costs nothing and
+returns the same answer. `TEXT_MODEL` configures it, defaulting to `gemini/gemini-3.1-flash-lite`
+(measured 600ms mean, the fastest of the cheap models that reliably returns valid JSON —
+`gpt-5-nano` is cheaper on paper and returned empty output twice). Setting it empty disables
+composing, and `compose` then reports that no text model is configured rather than guessing.
+
+Every call is attributed: `BrowseResult.text_model`, `.text_calls`, `.text_mean_ms`, and the cost is
+added to the run's own. Without that, a two-model run cannot be told apart from a one-model run in
+the results.
+
+Eight refinance runs with composing available found the answer in six; eight with it disabled found
+seven. The one four-run batch that scored 2/4 was over-continuation and a paging loop, both present
+before this change. Composing is never chosen on that eval, which is the expected result: every value
+it needs is in the goal.
+
 ## Known-failing evals are kept failing
 
 `test_jev_saves_the_file_once_the_host_becomes_ready` reproduces premature done: jev clicks before an

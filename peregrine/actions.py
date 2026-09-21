@@ -11,6 +11,8 @@ ACTIONS: dict[str, str] = {
     "click": "click the target element (a link, button, checkbox, menu item, or an option)",
     "type": "type one of the available values into the target text field or search box",
     "submit": "type one of the available values into the target field and press Enter to submit it",
+    "compose": "work out the right text for the target field and type it, when the goal does not "
+    "contain the words to use verbatim",
     "select": "choose one of the available values in the target dropdown",
     "scroll_down": "scroll down because what is needed is probably further down the page",
     "scroll_up": "scroll up because what is needed is probably above",
@@ -24,12 +26,14 @@ ACTIONS: dict[str, str] = {
     "blocked": "the goal cannot be achieved from here: login wall, captcha, error, or the content does not exist",
 }
 VALUE_ACTIONS = frozenset({"type", "submit", "select"})
-TARGET_ACTIONS = frozenset({"click", "type", "submit", "select"})
+COMPOSE_ACTIONS = frozenset({"compose"})
+TARGET_ACTIONS = frozenset({"click", "type", "submit", "select", "compose"})
 TYPEABLE_KINDS = frozenset({"textbox", "search", "email", "number", "password", "url", "tel", "date", "combobox"})
 TARGET_QUESTION = {
     "click": "click_target",
     "type": "type_target",
     "submit": "type_target",
+    "compose": "type_target",
     "select": "select_target",
     "press": "press_target",
 }

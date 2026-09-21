@@ -18,6 +18,7 @@ from peregrine.decider import Decider, JevDecider
 from peregrine.jev import JevClient, JevUsage
 from peregrine.page import Tab
 from peregrine.telemetry import start_span
+from peregrine.text_helper import TextHelper, TextUnavailable, field_context
 from peregrine.trace import Trace
 
 MAX_STEPS = int(os.getenv("BROWSER_MAX_STEPS", "20"))
@@ -49,6 +50,9 @@ class BrowseResult(BaseModel):
     cost_usd: float = 0.0
     duration_s: float = 0.0
     trace_path: str = ""
+    text_model: str = ""
+    text_calls: int = 0
+    text_mean_ms: int = 0
 
     def render(self) -> str:
         lines = [f"status: {self.status}"]
@@ -86,6 +90,7 @@ async def run_goal(
     observation: Observation | None = None
     status, reason = "max_steps", f"stopped after {max_steps} steps"
 
+    helper = TextHelper()
     trace = Trace(getattr(decider, "model", "jev"), goal)
     with start_span("browser_run") as span:
         span.set_attribute("browser.goal", goal[:200])
@@ -131,6 +136,9 @@ async def run_goal(
                     view_page += 1
                     entry = f"{step}. show_more -> showing the next part of {', '.join(sorted(more))}"
                 history.append(entry)
+                # Paging counts as a step like any other, so a run that only ever asks for more
+                # is caught by the no-progress guard instead of paging until it runs out of steps.
+                targets.append("show_more")
                 trace.step(step, state, observation, decision, entry.split("-> ", 1)[1])
                 if on_step is not None:
                     await on_step(step, entry)
@@ -138,7 +146,7 @@ async def run_goal(
             view_page = 0
             waits = waits + 1 if decision.action == "wait" else 0
             before_shot = await trace.shot(tab, step, "before")
-            outcome = await _perform(tab, decision, observation, values, waits)
+            outcome = await _perform(tab, decision, observation, values, waits, helper, goal, history)
             targets.append(f"{decision.action}:{decision.target}")
             if outcome != "download started" and (await tab.observe()).fingerprint() == fingerprints[-1]:
                 outcome += " (page unchanged)"
@@ -180,7 +188,10 @@ async def run_goal(
         jev_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         jev_mean_ms=usage.mean_ms,
-        cost_usd=usage.cost_usd,
+        cost_usd=round(usage.cost_usd + helper.cost_usd, 8),
+        text_model=helper.model if helper.calls else "",
+        text_calls=helper.calls,
+        text_mean_ms=helper.mean_ms,
         duration_s=round(time.perf_counter() - started, 2),
     )
 
@@ -235,7 +246,14 @@ def _pending(decision: Decision, observation: Observation, values: dict[str, str
 
 
 async def _perform(
-    tab: Tab, decision: Decision, observation: Observation, values: dict[str, str], waits: int = 0
+    tab: Tab,
+    decision: Decision,
+    observation: Observation,
+    values: dict[str, str],
+    waits: int = 0,
+    helper: TextHelper | None = None,
+    goal: str = "",
+    history: list[str] | None = None,
 ) -> str:
     action = decision.action
     if action in TARGET_ACTIONS:
@@ -247,6 +265,16 @@ async def _perform(
             return await tab.click(decision.target)
         if action == "press":
             return await tab.press(decision.key or "Enter", decision.target)
+        if action == "compose":
+            if helper is None or not helper.available:
+                return "composing text needs a text model; none is configured"
+            target = observation.find(decision.target)
+            field = target.describe() if target else str(decision.target)
+            try:
+                composed = await helper.value_for(field_context(goal, field, observation, history or []))
+            except TextUnavailable as error:
+                return f"no text could be composed: {error}"
+            return await tab.type(decision.target, composed, submit=True) + f" (composed {composed!r})"
         if action in VALUE_ACTIONS:
             # A prepared value wins when one was chosen; otherwise the model's own text is used.
             if decision.value in values:

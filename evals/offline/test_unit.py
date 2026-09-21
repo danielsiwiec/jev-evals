@@ -226,3 +226,43 @@ async def test_open_tabs_are_reported_once_a_second_one_exists():
         assert current["title"] == "Offer application"
         assert left_behind["title"].startswith("Results")
         assert left_behind["opened_seconds_ago"] >= current["opened_seconds_ago"]
+
+
+async def test_compose_needs_a_text_model_and_says_so_when_absent():
+    from peregrine.actions import Decision
+    from peregrine.loop import _perform
+    from peregrine.text_helper import TextHelper
+
+    async with _tab("signup_form.html") as tab:
+        field = await _find(tab, "Email address")
+        decision = Decision("compose", field.ref, None, 1.0, 1.0, 0.0, 0.0, 0.0)
+        outcome = await _perform(tab, decision, await tab.observe(), {}, helper=TextHelper(model=""), goal="sign up")
+        assert "needs a text model" in outcome, outcome
+        assert await tab.evaluate("() => document.title") != "SUBSCRIBED"
+
+
+async def test_text_helper_reports_failure_rather_than_guessing():
+    from peregrine.actions import Decision
+    from peregrine.loop import _perform
+    from peregrine.text_helper import TextHelper
+
+    async with _tab("signup_form.html") as tab:
+        field = await _find(tab, "Email address")
+        helper = TextHelper(model="nonexistent/model-that-cannot-be-reached")
+        decision = Decision("compose", field.ref, None, 1.0, 1.0, 0.0, 0.0, 0.0)
+        outcome = await _perform(tab, decision, await tab.observe(), {}, helper=helper, goal="sign up with an email")
+        assert "no text could be composed" in outcome, outcome
+        assert await tab.evaluate("() => document.title") != "SUBSCRIBED"
+
+
+async def test_span_filling_still_works_without_any_text_model():
+    """compose is an addition, not a replacement: goal words are still typed with no LLM call."""
+    from peregrine.actions import Decision
+    from peregrine.loop import _perform
+
+    async with _tab("search_engine.html") as tab:
+        field = await _find(tab, "Search the web")
+        decision = Decision("type", field.ref, None, 1.0, 1.0, 0.0, 0.0, 0.0, text="high tide")
+        outcome = await _perform(tab, decision, await tab.observe(), {})
+        assert "typed" in outcome, outcome
+        assert await tab.evaluate("() => document.getElementById('q').value") == "high tide"

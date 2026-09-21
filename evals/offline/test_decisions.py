@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from evals.local_browser import chrome_available, fresh_chrome
@@ -24,6 +26,7 @@ WORKSPACE = [
 ]
 RATE_GOAL = "Find the lowest mortgage refinance rate with zero points and report the lender and the rate."
 SEARCH_GOAL = "Find out when the next high tide is at the harbour, and report the time."
+SIGNUP_GOAL = "Sign up for the harbour bulletin newsletter using a contact email address."
 SAVE_GOAL = (
     "Save the file offered on this page. Get past any privacy or cookie dialog that stands in the way, "
     "then use the page's own control to save the file."
@@ -120,3 +123,58 @@ async def test_jev_can_type_text_the_goal_does_not_supply():
     assert title == "TIDE_PAGE_REACHED", (
         f"jev did not reach the answer: status={result.status} title={title!r} steps={result.steps}"
     )
+
+
+async def test_text_helper_composes_a_value_the_goal_does_not_contain():
+    """The generative half: an email address appears nowhere in the goal, so it must be composed."""
+    from peregrine.text_helper import TextHelper, field_context
+
+    async with fresh_chrome() as endpoint:
+        host = HostBrowser(endpoint)
+        tab = Tab(host)
+        try:
+            await tab.open((PAGES / "signup_form.html").as_uri())
+            observation = await tab.observe()
+            helper = TextHelper()
+            value = await helper.value_for(field_context(SIGNUP_GOAL, "Email address", observation, []))
+            assert "@" in value and "." in value.split("@")[-1], f"not an email: {value!r}"
+            assert value.lower() not in SIGNUP_GOAL.lower(), "the value should not be a span of the goal"
+            assert helper.calls == 1
+        finally:
+            await tab.close()
+            await host.close()
+
+
+async def test_text_helper_caches_identical_contexts():
+    from peregrine.text_helper import TextHelper, TextUnavailable, field_context
+
+    async with fresh_chrome() as endpoint:
+        host = HostBrowser(endpoint)
+        tab = Tab(host)
+        try:
+            await tab.open((PAGES / "signup_form.html").as_uri())
+            observation = await tab.observe()
+            helper = TextHelper()
+            context = field_context(SIGNUP_GOAL, "Email address", observation, [])
+            # The provider is occasionally unavailable; that is not what this test is about.
+            for attempt in range(3):
+                try:
+                    first = await helper.value_for(context)
+                    break
+                except TextUnavailable:
+                    if attempt == 2:
+                        pytest.skip("text model unavailable")
+                    await asyncio.sleep(1)
+            second = await helper.value_for(context)
+            assert first == second, "a cached context must give the same answer"
+            assert helper.calls == 1, f"the second call should have been served from cache, made {helper.calls}"
+        finally:
+            await tab.close()
+            await host.close()
+
+
+async def test_jev_composes_an_email_to_complete_a_signup():
+    """End to end: jev must pick `compose` itself, then the form must accept what comes back."""
+    result, title = await _run("signup_form.html", SIGNUP_GOAL, max_steps=8)
+    assert any("compose" in step for step in result.steps), f"jev did not choose to compose text: {result.steps}"
+    assert title == "SUBSCRIBED", f"status={result.status} title={title} steps={result.steps}"

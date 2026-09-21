@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Newsletter signup</title>
+<!--
+  A form whose values are NOT in the goal: an email address has to be composed, not quoted.
+  This is the case span-filling cannot serve and BU Bench's InteractionTests are full of.
+-->
+<body style="margin:0;font:16px system-ui;padding:24px">
+<h1>Newsletter signup</h1>
+<p>Enter a contact email to receive the weekly harbour bulletin.</p>
+<form id="f">
+  <p><label for="em">Email address</label> <input id="em" type="email" style="width:320px"></p>
+  <p><button id="go">Subscribe</button></p>
+</form>
+<p id="out"></p>
+<script>
+  document.getElementById('f').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = document.getElementById('em').value.trim();
+    const ok = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v);
+    document.getElementById('out').textContent = ok ? 'Subscribed ' + v : 'Invalid email';
+    document.title = ok ? 'SUBSCRIBED' : 'INVALID_EMAIL';
+  });
+</script>
