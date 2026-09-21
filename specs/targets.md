@@ -103,65 +103,57 @@ and 8.6s. Use headed when you want to watch; use headless when you want the mach
 ## Efficiency
 
 Pass rate says whether the goal was reached. Efficiency says how much of the work was wasted getting
-there: the share of actions that actually moved the run forward. A run can pass and still be mostly
-flailing, and that shows up here before it shows up in the pass rate.
+there, and what kind of waste it was.
 
-After every run, jev is handed the whole trace and asked, one `Noul` per action, whether that action
-contributed — judged **with hindsight against the full sequence**, because contribution is only
-visible in context. Opening a filter panel contributes if the filter is then used and does not if the
-run opens it four times. One call per run, about $0.00006, on unless `EVAL_EFFICIENCY=0`.
+After every run, jev is handed the whole trace and asked, one `Choice` per action, **what that action
+was for** — judged with hindsight against the full sequence:
 
-**The threshold matters.** Jev rates a plainly failed action near 0.1 and a plainly useful one near
-0.9, but a merely aimless one — paging repeatedly, wandering onto a lender's offer page — lands
-around 0.65. A 0.5 cut counts that as contribution, so the bar is `EVAL_CONTRIBUTED_AT=0.75`. With
-it, a clean five-action trace scores 100% and a ten-action trace with paging, a detour and two failed
-selects scores 30-50%.
+| label | meaning |
+|---|---|
+| `progressing` | filled a field the goal names, opened or applied a control it needs, revealed information it requires |
+| `redundant` | repeated something already done, or re-entered a value the field already held |
+| `overcontinuing` | the goal was already answerable and this went on anyway |
+| `misdirected` | acted on a field or control the goal never mentions |
+| `exploratory` | looked around without committing: scrolling or paging |
+| `failed` | did not do what it set out to do |
 
-**Known bias: on the refinance eval, jev is grading its own work.** For the other drivers it is an
-independent judge; for jev it is not, and the number should be read with that in mind. A second
-judge model would settle it and has not been tried.
+Efficiency is the share labelled `progressing`. One call per run, about $0.00006, on unless
+`EVAL_EFFICIENCY=0`.
 
-**Stability.** A clean trace scores 100% every time. A thrashing one varies between 30% and 50%
-across repeats, because several of its actions sit near the threshold. Treat single-run efficiency as
-indicative and the batch mean as the measurement.
-
-**The judge reads a trace written for it, not the debugging one.** The step history the loop keeps
-shows a field's value *before* typing, which reads as the result: a redundant retype of a field that
-already held the value looked more successful than the action that filled it, and scored 0.40 against
-0.49. Element refs are reassigned every observation, so the same field carries a different number
-each step and nothing marks it as the same field. `(page unchanged)` is a fingerprint over the first
-600 characters and 60 elements, so setting a filter inside a dialog legitimately shows no change --
-and saying so plainly made the judge read correct actions as failures.
-
-`BrowseResult.narrative` renders each action as intent and effect: *"typed '950000' into 'Property
-value' which held '830,000'; it worked"* against *"typed '950000' into 'Property value' which already
-held that"*. On that format the ordering comes out right and stays put across repeats:
-
-| action | debug form | judge form |
-|---|---|---|
-| fills the field | 0.49 | **0.83** |
-| redundant retype | 0.40 | **0.07** |
-| the zero-point filter | 0.71 | **0.85** |
-| applies the filter | 0.46 | **0.78** |
-| paging | 0.73 | 0.71 |
+**Labels beat a score, measurably.** The first version asked for a 0-1 usefulness rating. Jev is not
+decisive about that: a plainly useful action and an aimless one both landed near 0.75, so the answer
+depended entirely on where the threshold sat, and a single action straddling it swung a run's
+efficiency from 8% to 25%. Asked to *name* what an action was for, jev answers at 0.99-1.00
+confidence and gives the same twelve labels on three consecutive runs of the same trace. The
+classifier is being used for what it is good at.
 
 **The report says what the browser did, never whether it was right.** An early version ended each
 action with "it worked", which asserts success the harness cannot know: a value typed into the wrong
-field was carried out and still wasted. It measurably over-credited -- clicking through to a
-lender's offer page scored 0.78 with it and 0.21-0.48 without. Actions now end with the mechanical
-fact: "the click landed", "the text went in". The judge is told explicitly that being carried out is
-not the same as being useful.
+field was carried out and still wasted. It measurably over-credited — clicking through to a lender's
+offer page scored 0.78 with it and 0.21-0.48 without. Actions now end with the mechanical fact: "the
+click landed", "the text went in".
 
-The state also carries the step where the run came closest to believing it was finished. An absolute
-threshold was tried first and marked nothing: jev's `goal_met` peaked at 0.46 on a run that found the
-answer, so no fixed cut fires. The peak is used instead, since work after it is suspect.
+**The judge reads a trace written for it.** The loop's debugging history shows a field's value
+*before* typing, which reads as the result, so a redundant retype looked more successful than the
+action that filled the field. Element refs are reassigned every observation, so the same field
+carries a different number each step. `BrowseResult.narrative` renders intent and effect instead:
+*"typed '950000' into 'Property value' which held '830,000'"* against *"...which already held that"*.
 
-Measured at n=8 on this format: mean **37%**, with both failing runs at **10-11%** and every
-successful one between 40% and 55%. **Target: ≥ 35%**, with the same n=25 as the pass rate. The
-earlier 70% figure came from the debugging format and does not describe the same measurement.
+The state also carries the values the goal supplies, and the step where the run came closest to
+believing it was finished. An absolute threshold on `goal_met` was tried and marked nothing: it peaks
+around 0.46 even on runs that succeed, so the peak is used instead.
 
-Per-action verdicts are written to the run's trace as an `efficiency` record, because a low score
-without them says something is wrong and not what.
+Measured at n=8: **52% progressing**, with the rest 23% exploratory, 17% redundant, 6% failed, and
+1% each overcontinuing and misdirected. **Target: ≥ 50% progressing**, at the same n=25 as the pass
+rate. Earlier figures of 70% and 37% came from the score-based version and are not the same
+measurement.
+
+**Known bias: on the refinance eval, jev is grading its own work.** For the other drivers it is an
+independent judge; for jev it is not. A second judge model would settle it and has not been tried.
+
+Per-action labels are written to the run's trace as an `efficiency` record, because the breakdown is
+the part worth acting on: 17% redundant points at the form fight, and `overcontinuing` at the run
+that will not stop once the answer is on screen.
 
 ## Current targets
 
@@ -173,7 +165,7 @@ Measured on `evals/online/test_refinance_e2e.py` with the `jev` driver, current 
 | cost per run | $0.0029 | **≤ $0.005** | 10 |
 | latency median | 8.0s | **≤ 10s** | 25 |
 | latency p90 | 17.2s | **≤ 45s** | 25 |
-| efficiency | 37% (n=8) | **≥ 35%** | 25 |
+| efficiency (progressing) | 52% (n=8) | **≥ 50%** | 25 |
 
 Measured at n=25, headless, five at a time. Two independent n=25 batches, one headed and one
 headless, both scored 22/25, which is the first pass-rate claim here with a band under 30 points.

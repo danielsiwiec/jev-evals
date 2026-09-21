@@ -21,7 +21,7 @@ def render(rows: list[dict], header: str, columns: list[tuple[str, str]]) -> str
             cells.append(str(value))
         lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
-    lines.append("| driver | found | 95% CI | efficiency | median s | p90 s | mean cost |")
+    lines.append("| driver | found | 95% CI | progressing | median s | p90 s | mean cost |")
     lines.append("|---|---|---|---|---|---|---|")
     for driver in dict.fromkeys(r["driver"] for r in rows):
         group = [r for r in rows if r["driver"] == driver]
@@ -45,6 +45,14 @@ def render(rows: list[dict], header: str, columns: list[tuple[str, str]]) -> str
             f"\nn={runs}: a smoke test, not a measurement. Pinning a pass rate to +/-20% needs "
             f"{runs_needed(0.20)} runs, +/-10% needs {runs_needed(0.10)}. See specs/targets.md."
         )
+    tally: dict[str, int] = {}
+    for row in rows:
+        for name, count in (row.get("labels") or {}).items():
+            tally[name] = tally.get(name, 0) + count
+    if tally:
+        total = sum(tally.values())
+        share = ", ".join(f"{n} {name} ({n / total:.0%})" for name, n in sorted(tally.items(), key=lambda x: -x[1]))
+        lines.append(f"\nwhat the actions were for: {share}")
     for row in rows:
         lines.append(f"\nrun {row['run']} {row['driver']} steps:")
         lines.extend(f"  {s}" for s in row.get("steps") or [])

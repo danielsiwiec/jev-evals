@@ -251,10 +251,13 @@ async def test_efficiency_separates_a_clean_run_from_a_thrashing_one():
     bad = await judge(RATE_GOAL, thrashing)
     assert good.ratio > bad.ratio + 0.2, f"clean={good} thrashing={bad}"
     assert bad.wasted, "a thrashing run must name the actions that were wasted"
+    assert "redundant" in bad.breakdown or "failed" in bad.breakdown, (
+        f"a thrashing run's waste must be named, not just counted: {bad.breakdown}"
+    )
 
 
 async def test_efficiency_of_no_actions_is_not_a_crash():
     from peregrine.efficiency import judge
 
     empty = await judge(RATE_GOAL, [])
-    assert empty.total == 0 and empty.ratio == 0.0
+    assert empty.total == 0 and empty.ratio == 0.0 and empty.breakdown == {}

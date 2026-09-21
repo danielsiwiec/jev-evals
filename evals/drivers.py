@@ -108,14 +108,21 @@ async def _drive(
         if isinstance(decider, JevClient):
             await decider.close()
     efficiency = (
-        await judge(goal, result.narrative or result.steps, reached_at=result.goal_reached_at) if EFFICIENCY else None
+        await judge(
+            goal,
+            result.narrative or result.steps,
+            reached_at=result.goal_reached_at,
+            values=values,
+        )
+        if EFFICIENCY
+        else None
     )
     if efficiency is not None and result.trace_path:
         _append_efficiency(result.trace_path, goal, efficiency)
     return {
         "driver": label,
         "efficiency": efficiency.ratio if efficiency else None,
-        "wasted": len(efficiency.wasted) if efficiency else None,
+        "labels": efficiency.breakdown if efficiency else None,
         "status": result.status,
         "seconds": round(time.perf_counter() - started, 1),
         "model_calls": result.jev_calls,
@@ -156,13 +163,12 @@ DRIVERS = {
 
 
 def _append_efficiency(trace_path: str, goal: str, efficiency) -> None:
-    from peregrine.efficiency import CONTRIBUTED
     from peregrine.trace import Trace
 
     trace = Trace.__new__(Trace)
     trace.path = Path(trace_path)
     trace.shots = None
-    trace.efficiency(goal, efficiency.verdicts, CONTRIBUTED)
+    trace.efficiency(goal, efficiency.labels, efficiency.breakdown)
 
 
 async def gather(jobs: list[tuple[str, Any]], parallel: int = PARALLEL) -> list[dict[str, Any]]:
