@@ -4,7 +4,7 @@ Browser-agent evals comparing three models — `jev`, `gemini`, `luna` — on th
 
 ## Harness philosophy
 
-The harness is a pair of hands, not a second brain. Three rules, in order of precedence:
+The harness is a pair of hands, not a second brain. Four rules, in order of precedence:
 
 **1. All decision making is delegated to jev.** The harness never decides *what* to do — which element
 to act on, whether a dialog should be dismissed, whether a goal is met, whether to give up. It executes
@@ -21,7 +21,24 @@ value that the page discarded says so. Two more bugs came from breaking this rul
 the 1x1 `sr-only` radios that *are* the zero-point filter, making the goal unreachable, and a blocked
 click reported `clicked`, so jev waited for something that had never happened.
 
-**3. The harness is as dumb as possible, and every exception is documented.** Mechanics are allowed —
+**3. jev's action space is what a person can do.** Click, scroll, type a value or a keystroke, press
+a key, drag, refresh, go back, wait. Nothing else. An action exists because a user could perform it
+with a mouse and a keyboard, not because it is convenient to express in code. No "fill this form", no
+"dismiss the cookie banner", no "extract the table", no direct navigation to a URL the page does not
+link to, no calling a site's API. Compound or app-specific verbs quietly move task reasoning out of
+the model and into the harness, which is rule 1 again, and they make a passing eval say less about
+whether the model could drive a browser it has not seen. The current set is `click`, `type`, `select`,
+`scroll_up`, `scroll_down`, `back`, `wait`, plus `done` and `blocked` as terminal reports rather than
+page actions.
+
+Known gaps, worth closing when a goal needs them: there is no `refresh`, no `drag`, and no way to send
+a bare keystroke such as Enter, Escape or Tab independently of typing a value. `select` is also not
+strictly user-like — a person opens a dropdown and clicks an option, two clicks, where `select` sets
+the value through the DOM in one step. It stays for now because native `<select>` menus render outside
+the page and cannot be observed, but it is the one action in the set that a user could not perform as
+written.
+
+**4. The harness is as dumb as possible, and every exception is documented.** Mechanics are allowed —
 resolving where a click lands, waiting for a load, capturing an outcome. Judgement is not. Anything
 that is not purely mechanical is an exception, and an exception must be written down here with its
 reason. The current list is short by design:
