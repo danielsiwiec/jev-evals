@@ -34,7 +34,6 @@ TARGET_QUESTION = {
 }
 KEYS = ("Enter", "Escape", "Tab", "ArrowDown", "ArrowUp")
 CRITERIA_STYLES = ("full", "names", "refs")
-_WORD = re.compile(r"[a-z0-9]{3,}")
 _SECRET = re.compile(r"pass|secret|token|key|pin|cvv|ssn", re.I)
 _VALUE_LEN = 120
 _TEXT_EXCERPT = 1800
@@ -151,35 +150,19 @@ def _masked(name: str, value: str) -> str:
     return "(hidden)" if _SECRET.search(name) else value[:_VALUE_LEN]
 
 
-def _goal_words(goal: str) -> set[str]:
-    return set(_WORD.findall(goal.lower()))
-
-
 def ranked_elements(elements: list[Element], goal: str) -> list[Element]:
-    """Most likely to matter first: in a dialog, then goal-word overlap, then on screen.
+    """What is physically in the way first: a blocking dialog, then what is on screen.
 
-    Pagination walks this order, so the first page holds what a blocking dialog puts in the way
-    even on a page with hundreds of controls.
+    Both terms are facts about the page, not guesses about relevance. A modal blocks every other
+    control until it is dealt with, so it has to be reachable on the first page however large the
+    page is. Deciding which elements *matter* is jev's job; pagination walks this order and
+    `show_more` reveals the rest.
     """
-    words = _goal_words(goal)
 
-    def score(e: Element) -> tuple[int, int, int]:
-        overlap = len(words & _goal_words(f"{e.name} {e.extra}"))
-        return (1 if e.modal else 0, overlap, 1 if e.in_viewport else 0)
+    def score(e: Element) -> tuple[int, int]:
+        return (1 if e.modal else 0, 1 if e.in_viewport else 0)
 
     return sorted(elements, key=score, reverse=True)
-
-
-def prune(elements: list[Element], goal: str, limit: int) -> list[Element]:
-    words = _goal_words(goal)
-
-    def score(e: Element) -> tuple[int, int, int]:
-        overlap = len(words & _goal_words(f"{e.name} {e.extra}"))
-        return (1 if e.modal else 0, overlap, 1 if e.in_viewport else 0)
-
-    ranked = sorted(elements, key=score, reverse=True)
-    kept = ranked[:limit]
-    return sorted(kept, key=lambda e: e.ref)
 
 
 def _page_of(items: list[Any], page: int, size: int) -> tuple[list[Any], int]:
