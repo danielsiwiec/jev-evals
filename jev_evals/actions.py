@@ -184,6 +184,7 @@ def build_state(
     history: list[str],
     text_chars: int | None = None,
     page: int = 0,
+    tabs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Nothing is silently withheld: whatever is not shown is counted, and `show_more` reveals it."""
     size = text_chars or _TEXT_PAGE
@@ -207,6 +208,8 @@ def build_state(
         "elements": [e.line() for e in shown_elements],
         "recent_actions": list(reversed(shown_history)),
     }
+    if tabs and len(tabs) > 1:
+        state["open_tabs"] = tabs
     withheld = {
         "page_text_characters": text_left,
         "elements": elements_left,

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -118,6 +119,7 @@ class Tab:
         self._opened: list[Page] = []
         # Which tab was in front when a new one opened, so closing returns where a person would land.
         self._opener: dict[int, Page] = {}
+        self._opened_at: dict[int, float] = {}
 
     @property
     def page(self) -> Page | None:
@@ -168,6 +170,7 @@ class Tab:
         previous = self.page
         if previous is not None:
             self._opener[id(page)] = previous
+        self._opened_at.setdefault(id(page), time.time())
         self._opened.extend(p for p in opened if p not in self._opened)
         self.adopt(page)
         await _bring_to_front(page)
@@ -204,6 +207,7 @@ class Tab:
 
     async def open(self, url: str) -> str:
         page = await self.ensure()
+        self._opened_at.setdefault(id(page), time.time())
         try:
             await page.goto(url, wait_until="domcontentloaded")
         except PlaywrightError as error:
@@ -331,6 +335,26 @@ class Tab:
         await asyncio.sleep(0.3)
         return "scrolled"
 
+    async def tabs(self) -> list[dict[str, Any]]:
+        """Every open tab, so jev can see it left one behind rather than infer it from a title."""
+        current = self.page
+        now = time.time()
+        listed = []
+        for index, page in enumerate(await self._siblings()):
+            if page.is_closed() or (page is not current and _without_fragment(page.url) == "about:blank"):
+                continue
+            opened = self._opened_at.get(id(page))
+            listed.append(
+                {
+                    "index": index,
+                    "url": page.url,
+                    "title": await _safe_title(page),
+                    "current": page is current,
+                    "opened_seconds_ago": round(now - opened, 1) if opened else None,
+                }
+            )
+        return listed
+
     async def close_tab(self) -> str:
         page = self.page
         if page is None:
@@ -410,6 +434,13 @@ class Tab:
         path.parent.mkdir(parents=True, exist_ok=True)
         await page.screenshot(path=str(path), full_page=full_page)
         return path
+
+
+async def _safe_title(page: Page) -> str:
+    try:
+        return await page.title()
+    except PlaywrightError:
+        return ""
 
 
 async def _bring_to_front(page: Page) -> None:

@@ -103,6 +103,7 @@ async def run_goal(
                 history,
                 text_chars=getattr(decider, "max_text_chars", None),
                 page=view_page,
+                tabs=await tab.tabs(),
             )
             candidates = visible_elements(observation, goal, view_page)
             decision = await decider.decide(state, values, candidates, usage)

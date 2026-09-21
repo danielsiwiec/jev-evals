@@ -213,3 +213,16 @@ async def test_close_tab_leaves_the_only_tab_alone():
         outcome = await tab.close_tab()
         assert "left alone" in outcome, outcome
         assert (await tab.observe()).title.startswith("Results")
+
+
+async def test_open_tabs_are_reported_once_a_second_one_exists():
+    async with _tab("new_tab_detour.html") as tab:
+        assert len(await tab.tabs()) == 1, "a single tab needs no listing"
+        await tab.click((await _find(tab, "See offers")).ref)
+        tabs = await tab.tabs()
+        assert len(tabs) == 2, tabs
+        current = next(t for t in tabs if t["current"])
+        left_behind = next(t for t in tabs if not t["current"])
+        assert current["title"] == "Offer application"
+        assert left_behind["title"].startswith("Results")
+        assert left_behind["opened_seconds_ago"] >= current["opened_seconds_ago"]
